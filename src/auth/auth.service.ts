@@ -70,7 +70,12 @@ export class AuthService {
     }
 
     const role = await this.roleModel.findByPk(user.role_id, {
-      include: [Permission],
+      include: [
+        {
+          model: Permission,
+          through: { attributes: [] },
+        },
+      ],
     });
 
     if (!role) {
@@ -78,11 +83,21 @@ export class AuthService {
         'Invalid credentials or role not assigned',
       );
     }
+    if (!role.permissions || role.permissions.length === 0) {
+      throw new UnauthorizedException(
+        'Invalid credentials or role not assigned',
+      );
+    }
+    const permissionIds = role.permissions
+      ? role.permissions.map((p) => p.id)
+      : [];
+
+    console.log('Fetched permissions:', permissionIds);
 
     const payload = {
       sub: user.id,
       role: role.name,
-      permissions: role.permissions?.map((p) => p.id) || [],
+      permissions: permissionIds,
     };
 
     return { access_token: this.jwtService.sign(payload) };

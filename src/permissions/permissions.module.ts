@@ -3,9 +3,11 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { Permission } from './permission.model';
+import { Role } from 'src/roles/models/role.model';
+import { RolePermission } from 'src/roles/models/role-permission.model';
 
 @Module({
-  imports: [SequelizeModule.forFeature([Permission])],
+  imports: [SequelizeModule.forFeature([Permission, Role, RolePermission])],
   exports: [SequelizeModule],
 })
 export class PermissionsModule {}

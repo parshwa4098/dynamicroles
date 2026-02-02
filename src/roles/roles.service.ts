@@ -14,10 +14,12 @@ import { Role } from './models/role.model';
 import { RolePermission } from './models/role-permission.model';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { Permission } from 'src/permissions/permission.model';
 @Injectable()
 export class RolesService {
   constructor(
     @InjectModel(Role) private roleModel: typeof Role,
+    @InjectModel(Permission) private permissionModel: typeof Permission,
     @InjectModel(RolePermission)
     private rolePermissionModel: typeof RolePermission,
   ) {}
@@ -37,6 +39,7 @@ export class RolesService {
       role_id: role.id,
       permission_id,
     }));
+    console.log(mappings);
 
     await this.rolePermissionModel.bulkCreate(mappings);
 
