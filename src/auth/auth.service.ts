@@ -1,0 +1,90 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/sequelize';
+import * as bcrypt from 'bcrypt';
+
+import { User } from '../users/models/user.model';
+import { Role } from '../roles/models/role.model';
+import { Permission } from '../permissions/permission.model';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    @InjectModel(User) private userModel: typeof User,
+    @InjectModel(Role) private roleModel: typeof Role,
+    private jwtService: JwtService,
+  ) {}
+
+  async register(dto: {
+    name: string;
+    email: string;
+    password: string;
+    role_id: number;
+  }) {
+    const exists = await this.userModel.findOne({
+      where: { email: dto.email },
+    });
+    if (exists) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const hash = await bcrypt.hash(dto.password, 10);
+
+    const user = await this.userModel.create({
+      name: dto.name,
+      email: dto.email,
+      password: hash,
+      role_id: dto.role_id,
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+    };
+  }
+
+  async login(dto: { email: string; password: string }) {
+    const user = await this.userModel.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.password) {
+      throw new UnauthorizedException(
+        'Invalid credentials or role not assigned',
+      );
+    }
+
+    const passwordMatch = await bcrypt.compare(dto.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException(
+        'Invalid credentials or role not assigned',
+      );
+    }
+
+    const role = await this.roleModel.findByPk(user.role_id, {
+      include: [Permission],
+    });
+
+    if (!role) {
+      throw new UnauthorizedException(
+        'Invalid credentials or role not assigned',
+      );
+    }
+
+    const payload = {
+      sub: user.id,
+      role: role.name,
+      permissions: role.permissions?.map((p) => p.id) || [],
+    };
+
+    return { access_token: this.jwtService.sign(payload) };
+  }
+}
