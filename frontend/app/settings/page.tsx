@@ -3,12 +3,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { FaUserShield } from "react-icons/fa";
+import { FaUserShield, FaArrowLeft } from "react-icons/fa";
 import { MdDelete, MdEdit } from "react-icons/md";
 import { LuSave } from "react-icons/lu";
 import { TbEyeCancel } from "react-icons/tb";
-
 
 const API_URL = "http://localhost:5000";
 
@@ -19,32 +19,73 @@ interface Role {
 
 const getToken = () => {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  const t = localStorage.getItem("token");
+  return t && t !== "undefined" ? t : null;
+};
+
+const getUser = () => {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user");
+  if (!raw || raw === "undefined") return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 };
 
 export default function SettingsPage() {
-
-
+  const router = useRouter();
+  const loggedInUser = getUser();
   const [roles, setRoles] = useState<Role[]>([]);
   const [newRole, setNewRole] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = getToken();
-    if (!token) return;
+    
+    if (!token || !loggedInUser) {
+      router.replace("/auth/login");
+      return;
+    }
 
+    
+    if (loggedInUser.role !== "admin" && loggedInUser.role !== "manager") {
+      toast.error("Access denied. Admin or Manager role required.");
+      router.replace("/dashboard");
+      return;
+    }
+
+    
     fetch(`${API_URL}/roles`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
       .then((res) => res.json())
-      .then((res) => setRoles(res.data || []))
-    
-      
-      .catch(() => toast.error("Failed to load roles"));
-  }, []);
+      .then((res) => {
+        setRoles(res.data || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error("Failed to load roles");
+        setLoading(false);
+      });
+  }, [router, loggedInUser]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-300 mx-auto p-6">
+        <div className="text-center text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!loggedInUser || (loggedInUser.role !== "admin" && loggedInUser.role !== "manager")) {
+    return null;
+  }
 
   const handleAddRole = async () => {
     if (!newRole.trim()) {
@@ -76,6 +117,12 @@ export default function SettingsPage() {
   };
 
   const handleUpdateRole = async (id: number) => {
+    
+    if (loggedInUser.role !== "admin") {
+      toast.error("Only admin can update roles");
+      return;
+    }
+
     try {
       const token = getToken();
 
@@ -93,16 +140,22 @@ export default function SettingsPage() {
       setRoles((prev) =>
         prev.map((r) => (r.id === id ? { ...r, name: editingName } : r)),
       );
-      
+
       setEditingId(null);
       setEditingName("");
-      toast.success("Role updated");
+      toast.success("Role updated successfully");
     } catch (err: any) {
       toast.error(err.message);
     }
   };
 
   const handleDeleteRole = async (id: number) => {
+    
+    if (loggedInUser.role !== "admin") {
+      toast.error("Only admin can delete roles");
+      return;
+    }
+
     if (!confirm("Are you sure you want to delete this role?")) return;
 
     try {
@@ -114,7 +167,7 @@ export default function SettingsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
+      
       if (!res.ok) throw new Error("Delete failed");
 
       setRoles((prev) => prev.filter((r) => r.id !== id));
@@ -125,10 +178,23 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="w-full max-w-300 mx-auto p-6">
+    <div className="w-full max-w-300 mx-auto p-6 bg-black min-h-screen">
       <div className="flex items-center gap-3 mb-8">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-purple-400 hover:text-purple-300 transition-colors"
+        >
+          <FaArrowLeft className="text-xl" />
+        </button>
         <FaUserShield className="text-4xl text-purple-400" />
-        <h1 className="text-2xl font-bold text-white">Settings · Role Management</h1>
+        <h1 className="text-2xl font-bold text-white">
+          Settings · Role Management
+          {loggedInUser.role === "manager" && (
+            <span className="text-sm text-gray-400 block">
+              (Manager - Create roles only)
+            </span>
+          )}
+        </h1>
       </div>
 
     
@@ -141,13 +207,13 @@ export default function SettingsPage() {
         />
         <button
           onClick={handleAddRole}
-          className="bg-purple-500/20 text-purple-400 px-5 rounded-lg"
+          className="bg-purple-500/20 text-purple-400 px-5 rounded-lg hover:bg-purple-500/30 transition-colors"
         >
           Add Role
         </button>
       </div>
 
-      
+      {/* Roles List */}
       {roles.length === 0 ? (
         <div className="text-gray-500 text-center py-10 border border-gray-800 rounded-xl">
           No roles found
@@ -169,7 +235,7 @@ export default function SettingsPage() {
 
                   <div className="flex justify-end gap-3">
                     <button onClick={() => handleUpdateRole(role.id)}>
-                      <LuSave className="text-green-400 text-xl" />
+                      <LuSave className="text-green-400 text-xl hover:text-green-300" />
                     </button>
                     <button
                       onClick={() => {
@@ -177,7 +243,7 @@ export default function SettingsPage() {
                         setEditingName("");
                       }}
                     >
-                      <TbEyeCancel className="text-red-400 text-xl" />
+                      <TbEyeCancel className="text-red-400 text-xl hover:text-red-300" />
                     </button>
                   </div>
                 </>
@@ -188,18 +254,25 @@ export default function SettingsPage() {
                   </h3>
 
                   <div className="flex justify-end gap-4 mt-4">
-                    <button
-                      onClick={() => {
-                        setEditingId(role.id);
-                        setEditingName(role.name);
-                      }}
-                    >
-                      <MdEdit className="text-blue-400 text-xl" />
-                    </button>
+                    {loggedInUser.role === "admin" && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingId(role.id);
+                            setEditingName(role.name);
+                          }}
+                        >
+                          <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
+                        </button>
 
-                    <button onClick={() => handleDeleteRole(role.id)}>
-                      <MdDelete className="text-red-400 text-xl" />
-                    </button>
+                        <button onClick={() => handleDeleteRole(role.id)}>
+                          <MdDelete className="text-red-400 text-xl hover:text-red-300" />
+                        </button>
+                      </>
+                    )}
+                    {loggedInUser.role === "manager" && (
+                      <span className="text-gray-500 text-sm">View only</span>
+                    )}
                   </div>
                 </>
               )}

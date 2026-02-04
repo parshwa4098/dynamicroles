@@ -4,11 +4,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MdDelete } from "react-icons/md";
+import { MdDelete, MdOutlineSettings } from "react-icons/md";
 import { LiaUserEditSolid } from "react-icons/lia";
 import { toast } from "react-toastify";
 import { IoIosPersonAdd } from "react-icons/io";
-import { FaUserCircle, FaSignOutAlt } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaEdit } from "react-icons/fa";
 import Modal from "../_components/Modal";
 import StatCard from "../_components/StatCard";
 import { LuSave } from "react-icons/lu";
@@ -28,6 +28,12 @@ interface NewUser {
   email: string;
   password: string;
   role_id: RoleId;
+}
+
+interface ProfileEdit {
+  name: string;
+  email: string;
+  password?: string;
 }
 
 const API_URL = "http://localhost:5000";
@@ -54,14 +60,16 @@ const getUser = () => {
 
 export default function Page() {
   const router = useRouter();
-  const loggedInUser = getUser();
+  const [loggedInUser, setLoggedInUser] = useState(getUser());
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [tempRoleId, setTempRoleId] = useState<RoleId>(3);
+  const [loading, setLoading] = useState(true);
 
   const [newUser, setNewUser] = useState<NewUser>({
     name: "",
@@ -70,14 +78,23 @@ export default function Page() {
     role_id: 3,
   });
 
+  const [profileEdit, setProfileEdit] = useState<ProfileEdit>({
+    name: "",
+    email: "",
+    password: "",
+  });
+
   useEffect(() => {
     const token = getToken();
+    const user = getUser();
 
-    if (!token || !loggedInUser) {
+    if (!token || !user) {
       localStorage.clear();
-      router.push("/auth/login");
+      router.replace("/auth/login");
       return;
     }
+
+    setLoggedInUser(user);
 
     fetch(`${API_URL}/users`, {
       headers: {
@@ -85,9 +102,23 @@ export default function Page() {
       },
     })
       .then((res) => res.json())
-      .then((res) => setAllUsers(res.data || []))
-      .catch(() => toast.error("Failed to load users"));
-  }, [ router]);
+      .then((res) => {
+        setAllUsers(res.data || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error("Failed to load users");
+        setLoading(false);
+      });
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="bg-black text-white min-h-screen p-6">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
 
   if (!loggedInUser) return null;
 
@@ -95,7 +126,67 @@ export default function Page() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     toast.success("Logged out successfully!", { position: "top-center" });
-    router.push("/auth/login");
+    router.replace("/auth/login");
+  };
+
+  const handleSettings = () => {
+    if (loggedInUser?.role === "admin" || loggedInUser?.role === "manager") {
+      router.push('/settings');
+    } else {
+      toast.error("Access denied. Admin or Manager role required.");
+    }
+  };
+
+  const handleEditProfile = () => {
+    setProfileEdit({
+      name: loggedInUser.name,
+      email: loggedInUser.email,
+      password: "",
+    });
+    setShowProfileModal(true);
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      const token = getToken();
+      const updateData: any = {
+        name: profileEdit.name,
+        email: profileEdit.email,
+      };
+
+      if (profileEdit.password && profileEdit.password.trim()) {
+        updateData.password = profileEdit.password;
+      }
+
+      const res = await fetch(`${API_URL}/users/${loggedInUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+
+      
+      const updatedUser = { ...loggedInUser, ...updateData };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setLoggedInUser(updatedUser);
+
+      
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.id === loggedInUser.id ? { ...u, name: profileEdit.name, email: profileEdit.email } : u
+        )
+      );
+
+      toast.success("Profile updated successfully");
+      setShowProfileModal(false);
+    } catch (err: any) {
+      toast.error(err.message || "Update failed");
+    }
   };
 
   const handleAddUser = async () => {
@@ -117,6 +208,12 @@ export default function Page() {
       setAllUsers((prev) => [...prev, data.data]);
       toast.success("User added");
       setShowAddModal(false);
+      setNewUser({
+        name: "",
+        email: "",
+        password: "password",
+        role_id: 3,
+      });
     } catch (err: any) {
       toast.error(err.message || "Add failed");
     }
@@ -128,14 +225,13 @@ export default function Page() {
       if (!token) return;
 
       const user = allUsers[index];
-      console.log("User obj:",user);
-      
+
       if (!user || !user.id) {
         toast.error("Invalid user");
         return;
       }
 
-      const userId = Number(user.id)
+      const userId = Number(user.id);
       if (Number.isNaN(userId)) {
         toast.error("Invalid user id");
         return;
@@ -187,6 +283,7 @@ export default function Page() {
       setAllUsers((prev) => prev.filter((_, i) => i !== deleteIndex));
       toast.success("User deleted");
       setShowDeleteModal(false);
+      setDeleteIndex(null);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -197,22 +294,41 @@ export default function Page() {
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
           <FaUserCircle className="text-5xl text-gray-400" />
-          <h1 className="text-2xl">
-            Welcome {loggedInUser?.name}
-            <span className="text-purple-400"></span>
-          </h1>
+          <div>
+            <h1 className="text-2xl">
+              Welcome {loggedInUser?.name}
+            </h1>
+            <p className="text-purple-400 capitalize">{loggedInUser?.role}</p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleEditProfile}
+            className="flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-500/20 transition-colors"
+          >
+            <FaEdit /> Edit Profile
+          </button>
+
           {loggedInUser?.role === "admin" && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-lg"
+              className="flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-lg hover:bg-yellow-500/20 transition-colors"
             >
               <IoIosPersonAdd /> Add User
             </button>
           )}
-          
+
+          {(loggedInUser?.role === "admin" || loggedInUser?.role === "manager") && (
+            <button
+              onClick={handleSettings}
+              className="flex items-center gap-2 bg-green-500/10 text-green-500 px-4 py-2 rounded-lg hover:bg-green-500/20 transition-colors"
+            >
+              <MdOutlineSettings />
+              Settings
+            </button>
+          )}
+
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-lg transition-all"
@@ -223,7 +339,7 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard title="Total Users" value={allUsers.length} color="" />
         <StatCard
           title="Admins"
@@ -242,17 +358,16 @@ export default function Page() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {allUsers.map((u, index) => (
-          <div
-            key={u.id}
-            className="border border-gray-700 rounded-lg p-4"
-          >
+          <div key={u.id} className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
             <h3 className="font-semibold">{u.name}</h3>
             <p className="text-gray-400 text-sm">{u.email}</p>
 
-            <span className="text-xs capitalize text-purple-400">
-              {roleIdToName(u.role_id)}
+            <div className="mt-2">
+              <span className="text-xs capitalize text-purple-400">
+                {roleIdToName(u.role_id)}
+              </span>
               {editingIndex === index && (
                 <select
                   value={tempRoleId}
@@ -266,13 +381,16 @@ export default function Page() {
                   <option value={3}>User</option>
                 </select>
               )}
-            </span>
+            </div>
 
             {loggedInUser?.role === "admin" && (
-              <div key={u.id} className="flex justify-end gap-3 mt-3">
+              <div className="flex justify-end gap-3 mt-3">
                 {editingIndex === index ? (
                   <>
-                    <button onClick={() => handleEditUser(index)}>
+                    <button 
+                      onClick={() => handleEditUser(index)}
+                      className="hover:scale-110 transition-transform"
+                    >
                       <LuSave className="text-green-400" />
                     </button>
 
@@ -281,6 +399,7 @@ export default function Page() {
                         setEditingIndex(null);
                         setTempRoleId(u.role_id);
                       }}
+                      className="hover:scale-110 transition-transform"
                     >
                       <TbEyeCancel className="text-red-400" />
                     </button>
@@ -292,8 +411,9 @@ export default function Page() {
                         setEditingIndex(index);
                         setTempRoleId(u.role_id);
                       }}
+                      className="hover:scale-110 transition-transform"
                     >
-                      <LiaUserEditSolid />
+                      <LiaUserEditSolid className="text-blue-400" />
                     </button>
 
                     <button
@@ -301,8 +421,9 @@ export default function Page() {
                         setDeleteIndex(index);
                         setShowDeleteModal(true);
                       }}
+                      className="hover:scale-110 transition-transform"
                     >
-                      <MdDelete />
+                      <MdDelete className="text-red-400" />
                     </button>
                   </>
                 )}
@@ -312,52 +433,162 @@ export default function Page() {
         ))}
       </div>
 
+      
       <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)}>
-        <div className="bg-white p-6 rounded-xl text-black">
-          <h2 className="text-xl font-bold mb-4">Add User</h2>
+        <div className="bg-gray-900 p-6 rounded-xl text-white">
+          <h2 className="text-xl font-bold mb-4">Add New User</h2>
 
-          <input
-            placeholder="Name"
-            className="w-full mb-3 p-2 border"
-            onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-          />
-          <input
-            placeholder="Email"
-            className="w-full mb-3 p-2 border"
-            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-          />
-          <select
-            className="w-full mb-4 p-2 border"
-            onChange={(e) =>
-              setNewUser({
-                ...newUser,
-                role_id: Number(e.target.value) as RoleId,
-              })
-            }
-          >
-            <option value={1}>Admin</option>
-            <option value={2}>Manager</option>
-            <option value={3}>User</option>
-          </select>
+          <div className="space-y-4">
+            <input
+              placeholder="Full Name"
+              value={newUser.name}
+              className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+            />
+            
+            <input
+              placeholder="Email Address"
+              type="email"
+              value={newUser.email}
+              className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+            />
+            
+            <input
+              placeholder="Password"
+              type="password"
+              value={newUser.password}
+              className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+            />
+            
+            <select
+              value={newUser.role_id}
+              className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  role_id: Number(e.target.value) as RoleId,
+                })
+              }
+            >
+              <option value={1}>Admin</option>
+              <option value={2}>Manager</option>
+              <option value={3}>User</option>
+            </select>
+          </div>
 
-          <button
-            onClick={handleAddUser}
-            className="bg-black text-white px-4 py-2 rounded"
-          >
-            Save
-          </button>
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={handleAddUser}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Add User
+            </button>
+            <button
+              onClick={() => setShowAddModal(false)}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </Modal>
 
+      
       <Modal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
-        <div className="bg-gray-900 p-6 rounded-xl">
-          <h2 className="text-xl mb-4">Delete User?</h2>
-          <button
-            onClick={handleDeleteConfirm}
-            className="bg-red-500 px-4 py-2 rounded"
-          >
-            Confirm
-          </button>
+        <div className="bg-gray-900 p-6 rounded-xl text-white">
+          <h2 className="text-xl font-bold mb-4">Delete User</h2>
+          <p className="mb-6">
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-red-400">
+              {deleteIndex !== null ? allUsers[deleteIndex]?.name : ""}
+            </span>
+            ? This action cannot be undone.
+          </p>
+          
+          <div className="flex gap-3">
+            <button
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => {
+                setShowDeleteModal(false);
+                setDeleteIndex(null);
+              }}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      
+      <Modal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)}>
+        <div className="bg-gray-900 p-6 rounded-xl text-white">
+          <h2 className="text-xl font-bold mb-4">Edit Profile</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Full Name</label>
+              <input
+                value={profileEdit.name}
+                className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+                onChange={(e) => setProfileEdit({ ...profileEdit, name: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Email Address</label>
+              <input
+                type="email"
+                value={profileEdit.email}
+                className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+                onChange={(e) => setProfileEdit({ ...profileEdit, email: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                New Password (leave blank to keep current)
+              </label>
+              <input
+                type="password"
+                value={profileEdit.password}
+                placeholder="Enter new password"
+                className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
+                onChange={(e) => setProfileEdit({ ...profileEdit, password: e.target.value })}
+              />
+            </div>
+
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <p className="text-sm text-gray-400">
+                <strong>Current Role:</strong> <span className="text-purple-400 capitalize">{loggedInUser.role}</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Role can only be changed by an admin
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={handleUpdateProfile}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Update Profile
+            </button>
+            <button
+              onClick={() => setShowProfileModal(false)}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
