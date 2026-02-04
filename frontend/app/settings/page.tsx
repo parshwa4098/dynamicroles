@@ -213,7 +213,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Roles List */}
+    
       {roles.length === 0 ? (
         <div className="text-gray-500 text-center py-10 border border-gray-800 rounded-xl">
           No roles found
