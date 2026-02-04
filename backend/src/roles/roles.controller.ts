@@ -17,11 +17,12 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import { PermissionGuard } from 'src/common/guards/permission.guard';
+import { JwtGuard } from 'src/common/guards/jwt.guard';
 
 @Controller('roles')
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
-  @UseGuards(PermissionGuard)
+  @UseGuards(JwtGuard, PermissionGuard)
   @Post()
   @RequirePermissions(5)
   create(@Body() dto: CreateRoleDto) {
@@ -39,13 +40,13 @@ export class RolesController {
   findOne(@Param('id') id: number) {
     return this.rolesService.findOne(id);
   }
-  @UseGuards(PermissionGuard)
+  @UseGuards(JwtGuard, PermissionGuard)
   @Patch(':id')
   @RequirePermissions(7)
   update(@Param('id') id: number, @Body() dto: UpdateRoleDto) {
     return this.rolesService.update(id, dto);
   }
-  @UseGuards(PermissionGuard)
+  @UseGuards(JwtGuard, PermissionGuard)
   @Delete(':id')
   @RequirePermissions(8)
   remove(@Param('id') id: number) {
