@@ -47,19 +47,20 @@ export class UsersService {
     const user = await this.userModel.findByPk(id);
     if (!user) throw new NotFoundException('User not found');
 
-    if (currentUser.role === 'Admin' && (dto.name || dto.email)) {
+    if (currentUser.role === 'admin' && (dto.name || dto.email)) {
       throw new ForbiddenException('Admin cannot update personal information');
     }
 
-    if (currentUser.role === 'User' && currentUser.sub !== id) {
+    if (currentUser.role === 'user' && currentUser.sub !== id) {
       throw new ForbiddenException('User can update only own profile');
     }
 
-    if (dto.role_id && currentUser.role !== 'Admin') {
+    if (dto.role_id && currentUser.role !== 'admin') {
       throw new ForbiddenException('Only admin can update role');
     }
 
     await user.update(dto);
+
     return { message: 'User updated successfully' };
   }
   async remove(id: number) {

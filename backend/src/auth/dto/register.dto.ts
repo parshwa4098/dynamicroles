@@ -1,9 +1,9 @@
 import {
   IsEmail,
-  IsInt,
   IsString,
   MinLength,
   MaxLength,
+  IsOptional,
 } from 'class-validator';
 
 export class RegisterDto {
@@ -17,6 +17,6 @@ export class RegisterDto {
   @MaxLength(20, { message: 'Password must be at most 20 characters' })
   password: string;
 
-  @IsInt()
-  role_id: number;
+  @IsOptional()
+  role_id?: number;
 }

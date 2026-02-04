@@ -9,6 +9,7 @@ import {
   Body,
   Req,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 
 import { UsersService } from './users.service';
@@ -42,9 +43,14 @@ export class UsersController {
   @UseGuards(JwtGuard, PermissionGuard)
   @Patch(':id')
   @RequirePermissions(3)
-  update(@Param('id') id: number, @Body() dto: UpdateUserDto, @Req() req) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+    @Req() req,
+  ) {
     return this.usersService.update(id, dto, req.user);
   }
+
   @UseGuards(PermissionGuard)
   @Delete(':id')
   @RequirePermissions(4)

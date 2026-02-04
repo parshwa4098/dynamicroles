@@ -23,12 +23,7 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async register(dto: {
-    name: string;
-    email: string;
-    password: string;
-    role_id: number;
-  }) {
+  async register(dto: { name: string; email: string; password: string }) {
     const exists = await this.userModel.findOne({
       where: { email: dto.email },
     });
@@ -42,7 +37,7 @@ export class AuthService {
       name: dto.name,
       email: dto.email,
       password: hash,
-      role_id: dto.role_id,
+      role_id: 3,
     });
 
     return {
@@ -100,6 +95,15 @@ export class AuthService {
       permissions: permissionIds,
     };
 
-    return { access_token: this.jwtService.sign(payload) };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        sub: user.id,
+        name: user.name,
+        email: user.email,
+        role: role.name,
+        role_id: user.role_id,
+      },
+    };
   }
 }

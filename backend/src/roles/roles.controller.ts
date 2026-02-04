@@ -27,13 +27,13 @@ export class RolesController {
   create(@Body() dto: CreateRoleDto) {
     return this.rolesService.create(dto);
   }
-  @UseGuards(PermissionGuard)
+
   @Get()
   @RequirePermissions(6)
   findAll() {
     return this.rolesService.findAll();
   }
-  @UseGuards(PermissionGuard)
+
   @Get(':id')
   @RequirePermissions(6)
   findOne(@Param('id') id: number) {
