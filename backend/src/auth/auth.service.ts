@@ -90,7 +90,7 @@ export class AuthService {
     console.log('Fetched permissions:', permissionIds);
 
     const payload = {
-      sub: user.id,
+      id: user.id,
       role: role.name,
       permissions: permissionIds,
     };
@@ -98,7 +98,7 @@ export class AuthService {
     return {
       access_token: this.jwtService.sign(payload),
       user: {
-        sub: user.id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: role.name,

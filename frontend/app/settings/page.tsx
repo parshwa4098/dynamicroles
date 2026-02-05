@@ -70,19 +70,7 @@ export default function SettingsPage() {
   };
 
   
-  const hasSettingsAccess = () => {
-    if (!loggedInUser || roles.length === 0) return false;
-    
   
-    const currentUser = allUsers.find(u => u.id === loggedInUser.sub);
-    if (!currentUser) {
-    
-      return loggedInUser.role === "admin" || loggedInUser.role === "manager";
-    }
-    
-    const userRole = getRoleName(currentUser.role_id).toLowerCase();
-    return userRole === "admin" || userRole === "manager";
-  };
 
   
   const isAdmin = () => {
@@ -137,7 +125,7 @@ export default function SettingsPage() {
   }
 
 
-  if (!loggedInUser || !hasSettingsAccess()) {
+  if (!loggedInUser) {
     return (
       <div className="w-full max-w-300 mx-auto p-6 bg-black min-h-screen">
         <div className="text-center text-white">Access denied. Admin or Manager role required.</div>
@@ -263,7 +251,7 @@ export default function SettingsPage() {
 
   
   const getCurrentUserRole = () => {
-    const currentUser = allUsers.find(u => u.id === loggedInUser.sub);
+    const currentUser = allUsers.find(u => u.id === loggedInUser.id);
     if (currentUser) {
       return getRoleName(currentUser.role_id);
     }

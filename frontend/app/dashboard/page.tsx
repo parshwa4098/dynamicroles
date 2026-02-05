@@ -115,25 +115,26 @@ export default function Page() {
   const hasSettingsAccess = () => {
     if (!loggedInUser || roles.length === 0) return false;
 
-    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.id);
     console.log("current user", currentUser);
-    console.log("logged in user",loggedInUser);
-    
+    console.log("logged in user", loggedInUser);
 
     if (!currentUser) {
-      return loggedInUser.role === "admin" || loggedInUser.role === "manager";
+      return loggedInUser;
     }
 
-    const userRole = getRoleName(currentUser.role_id).toLowerCase();
+    const userRole = getRoleName(loggedInUser.role_id).toLowerCase();
+    console.log(loggedInUser.role_id);
+
     console.log(userRole);
 
-    return userRole === "admin" || userRole === "manager";
+    return userRole;
   };
 
   const isAdmin = () => {
     if (!loggedInUser || roles.length === 0) return false;
 
-    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.id);
     if (!currentUser) {
       return loggedInUser.role === "admin";
     }
@@ -234,7 +235,7 @@ export default function Page() {
         updateData.password = profileEdit.password;
       }
 
-      const res = await fetch(`${API_URL}/users/${loggedInUser.sub}`, {
+      const res = await fetch(`${API_URL}/users/${loggedInUser.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -252,7 +253,7 @@ export default function Page() {
 
       setAllUsers((prev) =>
         prev.map((u) =>
-          u.id === loggedInUser.sub
+          u.id === loggedInUser.id
             ? { ...u, name: profileEdit.name, email: profileEdit.email }
             : u,
         ),
@@ -373,7 +374,7 @@ export default function Page() {
   }));
 
   const getCurrentUserRole = () => {
-    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.id);
     if (currentUser) {
       return getRoleName(currentUser.role_id);
     }
