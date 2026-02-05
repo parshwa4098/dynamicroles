@@ -2,6 +2,7 @@
 import {
   IsEmail,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
@@ -9,6 +10,7 @@ import {
 import { Type } from 'class-transformer';
 
 export class UpdateUserDto {
+  @IsNotEmpty()
   @IsOptional()
   @IsString()
   name?: string;

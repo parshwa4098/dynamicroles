@@ -220,6 +220,8 @@ export default function Page() {
       email: loggedInUser.email,
       password: "",
     });
+    console.log(loggedInUser.name);
+
     setShowProfileModal(true);
   };
 
@@ -385,7 +387,11 @@ export default function Page() {
     <div className="bg-black text-white min-h-screen p-6">
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
-          <FaUserCircle className="text-5xl text-gray-400" />
+          <FaUserCircle
+            className="text-5xl text-gray-400 cursor-pointer"
+            onClick={handleEditProfile}
+          />
+
           <div>
             <h1 className="text-2xl">Welcome {loggedInUser?.name}</h1>
             <p className="text-purple-400 capitalize">{getCurrentUserRole()}</p>
@@ -393,13 +399,6 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleEditProfile}
-            className="flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-500/20 transition-colors"
-          >
-            <FaEdit /> Edit Profile
-          </button>
-
           {isAdmin() && (
             <button
               onClick={() => setShowAddModal(true)}

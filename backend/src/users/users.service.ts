@@ -7,6 +7,7 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import * as bcrypt from 'bcrypt';
@@ -20,6 +21,12 @@ export class UsersService {
   constructor(@InjectModel(User) private userModel: typeof User) {}
 
   async create(dto: CreateUserDto) {
+    const exists = await this.userModel.findOne({
+      where: { email: dto.email },
+    });
+    if (exists) {
+      throw new ConflictException('Email already registered');
+    }
     const hash = await bcrypt.hash(dto.password, 10);
 
     return this.userModel.create({
@@ -47,21 +54,22 @@ export class UsersService {
     const user = await this.userModel.findByPk(id);
     if (!user) throw new NotFoundException('User not found');
 
-    const isOwnProfile = currentUser.sub === id;
-
+    const isOwnProfile = currentUser.id === id;
     const hasPersonalUpdates = dto.name || dto.email || dto.password;
 
-    if (hasPersonalUpdates && !isOwnProfile) {
+    if (hasPersonalUpdates && !isOwnProfile && currentUser.role !== 'admin') {
       throw new ForbiddenException(
         'You can only update your own personal information',
       );
     }
 
-    if (dto.role_id && currentUser.role !== 'admin') {
-      throw new ForbiddenException('Only admin can update user roles');
-    }
-    if (currentUser.role === 'admin' && currentUser.sub === id) {
-      throw new ForbiddenException('Admin cannot edit  their own role');
+    if (dto.role_id) {
+      if (currentUser.role !== 'admin') {
+        throw new ForbiddenException('Only admin can update user roles');
+      }
+      if (currentUser.id === id) {
+        throw new ForbiddenException('Admin cannot edit their own role');
+      }
     }
 
     if (dto.password) {
@@ -69,7 +77,6 @@ export class UsersService {
     }
 
     await user.update(dto);
-
     return { message: 'User updated successfully' };
   }
 
@@ -77,7 +84,7 @@ export class UsersService {
     const user = await this.userModel.findByPk(id);
     if (!user) throw new NotFoundException('User not found');
 
-    if (currentUser.role === 'admin' && currentUser.sub === id) {
+    if (currentUser.role === 'admin' && currentUser.id === id) {
       throw new ForbiddenException('Admin cannot delete their own account');
     }
 
