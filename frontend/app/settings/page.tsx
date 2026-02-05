@@ -15,6 +15,12 @@ const API_URL = "http://localhost:5000";
 interface Role {
   id: number;
   name: string;
+  permissions?: Permission[];
+}
+
+interface Permission {
+  id: number;
+  name: string;
 }
 
 interface User {
@@ -61,28 +67,40 @@ export default function SettingsPage() {
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Delete modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   const getRoleName = (roleId: number) => {
     const role = roles.find((r) => r.id === roleId);
     return role ? role.name : "Unknown";
   };
 
-  
-  
-
-  
   const isAdmin = () => {
     if (!loggedInUser || roles.length === 0) return false;
-    
-    const currentUser = allUsers.find(u => u.id === loggedInUser.sub);
-    if (!currentUser) {
-      return loggedInUser.role === "admin";
+
+    const currentUser = allUsers.find(
+      (u) => u.id === loggedInUser.sub || u.id === loggedInUser.id,
+    );
+    if (currentUser) {
+      const userRole = getRoleName(currentUser.role_id).toLowerCase();
+      return userRole === "admin";
     }
-    
-    const userRole = getRoleName(currentUser.role_id).toLowerCase();
-    return userRole === "admin";
+
+    return loggedInUser.role === "admin";
+  };
+
+  const getCurrentUserRole = () => {
+    const currentUser = allUsers.find(
+      (u) => u.id === loggedInUser.sub || u.id === loggedInUser.id,
+    );
+    if (currentUser) {
+      return getRoleName(currentUser.role_id);
+    }
+    return loggedInUser.role || "Unknown";
   };
 
   useEffect(() => {
@@ -99,18 +117,25 @@ export default function SettingsPage() {
     Promise.all([
       fetch(`${API_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
-      }).then((res) => res.json()),
+      }).then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch users");
+        return res.json();
+      }),
 
       fetch(`${API_URL}/roles`, {
         headers: { Authorization: `Bearer ${token}` },
-      }).then((res) => res.json()),
+      }).then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch roles");
+        return res.json();
+      }),
     ])
       .then(([usersRes, rolesRes]) => {
         setAllUsers(usersRes.data || []);
         setRoles(rolesRes.data || []);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Data loading error:", error);
         toast.error("Failed to load data");
         setLoading(false);
       });
@@ -124,11 +149,12 @@ export default function SettingsPage() {
     );
   }
 
-
   if (!loggedInUser) {
     return (
       <div className="w-full max-w-300 mx-auto p-6 bg-black min-h-screen">
-        <div className="text-center text-white">Access denied. Admin or Manager role required.</div>
+        <div className="text-center text-white">
+          Access denied. Please log in.
+        </div>
       </div>
     );
   }
@@ -168,7 +194,7 @@ export default function SettingsPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) throw new Error(data.message || "Failed to create role");
 
       setRoles((prev) => [...prev, data.data]);
       setNewRole("");
@@ -179,51 +205,91 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateRole = async (id: number) => {
+  const handleUpdateRole = async () => {
     if (!isAdmin()) {
       toast.error("Only admin can update roles");
+      return;
+    }
+
+    if (!editingName.trim()) {
+      toast.error("Role name cannot be empty");
+      return;
+    }
+
+    if (selectedPermissions.length === 0) {
+      toast.error("At least one permission required");
       return;
     }
 
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_URL}/roles/${id}`, {
+      const res = await fetch(`${API_URL}/roles/${editingId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: editingName }),
+        body: JSON.stringify({
+          name: editingName.trim(),
+          permissions: selectedPermissions,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Update failed");
 
       setRoles((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, name: editingName } : r)),
+        prev.map((r) =>
+          r.id === editingId
+            ? {
+                ...r,
+                name: editingName.trim(),
+                permissions: FIXED_PERMISSIONS.filter((p) =>
+                  selectedPermissions.includes(p.id),
+                ),
+              }
+            : r,
+        ),
       );
 
+      // Reset to create mode
+      setIsEditMode(false);
       setEditingId(null);
       setEditingName("");
+      setNewRole("");
+      setSelectedPermissions([]);
       toast.success("Role updated successfully");
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Update failed");
     }
   };
 
-  const handleDeleteRole = async (id: number) => {
+  const handleDeleteClick = (role: Role) => {
     if (!isAdmin()) {
       toast.error("Only admin can delete roles");
       return;
     }
 
-    if (!confirm("Are you sure you want to delete this role?")) return;
+    const usersWithRole = allUsers.filter((user) => user.role_id === role.id);
+    if (usersWithRole.length > 0) {
+      toast.error(
+        `Cannot delete role. ${usersWithRole.length} user(s) still have this role.`,
+      );
+      return;
+    }
+
+    setRoleToDelete(role);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!roleToDelete) return;
 
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_URL}/roles/${id}`, {
+      const res = await fetch(`${API_URL}/roles/${roleToDelete.id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -236,26 +302,43 @@ export default function SettingsPage() {
         throw new Error(data.message || "Delete failed");
       }
 
-      setRoles((prev) => prev.filter((r) => r.id !== id));
+      setRoles((prev) => prev.filter((r) => r.id !== roleToDelete.id));
       toast.success("Role deleted successfully");
+      setShowDeleteModal(false);
+      setRoleToDelete(null);
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Delete failed");
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setRoleToDelete(null);
   };
 
   const handleBackToDashboard = () => {
-  
-    window.dispatchEvent(new Event('dashboard-refresh'));
+    window.dispatchEvent(new Event("dashboard-refresh"));
     router.push("/dashboard");
   };
 
-  
-  const getCurrentUserRole = () => {
-    const currentUser = allUsers.find(u => u.id === loggedInUser.id);
-    if (currentUser) {
-      return getRoleName(currentUser.role_id);
-    }
-    return loggedInUser.role; 
+  const getRolePermissions = (role: Role) => {
+    return role.permissions?.map((p) => p.id) || [];
+  };
+
+  const handleEditRole = (role: Role) => {
+    setIsEditMode(true);
+    setEditingId(role.id);
+    setEditingName(role.name);
+    setNewRole(role.name);
+    setSelectedPermissions(getRolePermissions(role));
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditingId(null);
+    setEditingName("");
+    setNewRole("");
+    setSelectedPermissions([]);
   };
 
   return (
@@ -269,7 +352,7 @@ export default function SettingsPage() {
         </button>
         <FaUserShield className="text-4xl text-purple-400" />
         <h1 className="text-2xl font-bold text-white">
-         Roles Management
+          Roles Management
           {!isAdmin() && (
             <span className="text-sm text-gray-400 block">
               ({getCurrentUserRole()} - Create roles only)
@@ -280,12 +363,16 @@ export default function SettingsPage() {
 
       <div className="bg-gray-900/40 border border-gray-700 rounded-xl p-6 mb-6">
         <h2 className="text-lg font-semibold text-white mb-4">
-          Create New Role
+          {isEditMode ? "Edit Role" : "Create New Role"}
         </h2>
 
         <input
-          value={newRole}
-          onChange={(e) => setNewRole(e.target.value)}
+          value={isEditMode ? editingName : newRole}
+          onChange={(e) =>
+            isEditMode
+              ? setEditingName(e.target.value)
+              : setNewRole(e.target.value)
+          }
           placeholder="Enter role name (e.g., superadmin, editor)"
           className="w-full bg-black border border-gray-700 p-3 rounded-lg text-white mb-4"
         />
@@ -319,13 +406,35 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <button
-          onClick={handleAddRole}
-          disabled={!newRole.trim() || selectedPermissions.length === 0}
-          className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Create Role
-        </button>
+        <div className="flex gap-3">
+          {isEditMode ? (
+            <>
+              <button
+                onClick={handleUpdateRole}
+                disabled={
+                  !editingName.trim() || selectedPermissions.length === 0
+                }
+                className="bg-green-500/20 text-green-400 px-6 py-3 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Update Role
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="bg-red-500/20 text-red-400 px-6 py-3 rounded-lg hover:bg-red-500/30 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleAddRole}
+              disabled={!newRole.trim() || selectedPermissions.length === 0}
+              className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Create Role
+            </button>
+          )}
+        </div>
       </div>
 
       {roles.length === 0 ? (
@@ -339,58 +448,69 @@ export default function SettingsPage() {
               key={role.id}
               className="border border-gray-700 rounded-xl p-5 bg-gray-900/40"
             >
-              {editingId === role.id ? (
-                <>
-                  <input
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    className="w-full bg-black border border-gray-600 p-2 rounded mb-3 text-white"
-                  />
+              <h3 className="text-lg font-semibold text-white capitalize">
+                {role.name}
+              </h3>
 
-                  <div className="flex justify-end gap-3">
-                    <button onClick={() => handleUpdateRole(role.id)}>
-                      <LuSave className="text-green-400 text-xl hover:text-green-300" />
-                    </button>
+              <div className="flex justify-end gap-4 mt-4">
+                {isAdmin() ? (
+                  <>
                     <button
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditingName("");
-                      }}
+                      onClick={() => handleEditRole(role)}
+                      disabled={isEditMode}
+                      className="disabled:opacity-50"
                     >
-                      <TbEyeCancel className="text-red-400 text-xl hover:text-red-300" />
+                      <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
                     </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-semibold text-white capitalize">
-                    {role.name}
-                  </h3>
 
-                  <div className="flex justify-end gap-4 mt-4">
-                    {isAdmin() ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(role.id);
-                            setEditingName(role.name);
-                          }}
-                        >
-                          <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
-                        </button>
-
-                        <button onClick={() => handleDeleteRole(role.id)}>
-                          <MdDelete className="text-red-400 text-xl hover:text-red-300" />
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-gray-500 text-sm">View only</span>
-                    )}
-                  </div>
-                </>
-              )}
+                    <button
+                      onClick={() => handleDeleteClick(role)}
+                      disabled={isEditMode}
+                      className="disabled:opacity-50"
+                    >
+                      <MdDelete className="text-red-400 text-xl hover:text-red-300" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-gray-500 text-sm">View only</span>
+                )}
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && roleToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              Delete Role
+            </h3>
+
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete the role{" "}
+              <span className="text-red-400 font-semibold">
+                &quot;{roleToDelete.name}&quot;
+              </span>
+              ? This action cannot be undone.
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleDeleteCancel}
+                className="bg-gray-700 text-gray-300 px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

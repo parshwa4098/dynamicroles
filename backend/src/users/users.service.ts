@@ -8,6 +8,8 @@ import {
   ForbiddenException,
   NotFoundException,
   ConflictException,
+  InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import * as bcrypt from 'bcrypt';
@@ -51,33 +53,62 @@ export class UsersService {
   }
 
   async update(id: number, dto: UpdateUserDto, currentUser: any) {
-    const user = await this.userModel.findByPk(id);
-    if (!user) throw new NotFoundException('User not found');
+    try {
+      const user = await this.userModel.findByPk(id);
+      if (!user) throw new NotFoundException('User not found');
 
-    const isOwnProfile = currentUser.id === id;
-    const hasPersonalUpdates = dto.name || dto.email || dto.password;
+      const isOwnProfile = currentUser.id === id;
+      const hasPersonalUpdates = dto.name || dto.email || dto.password;
 
-    if (hasPersonalUpdates && !isOwnProfile && currentUser.role !== 'admin') {
-      throw new ForbiddenException(
-        'You can only update your own personal information',
-      );
-    }
-
-    if (dto.role_id) {
-      if (currentUser.role !== 'admin') {
-        throw new ForbiddenException('Only admin can update user roles');
+      if (hasPersonalUpdates && !isOwnProfile && currentUser.role !== 'admin') {
+        throw new ForbiddenException(
+          'You can only update your own personal information',
+        );
       }
-      if (currentUser.id === id) {
-        throw new ForbiddenException('Admin cannot edit their own role');
+
+      if (dto.role_id) {
+        if (currentUser.role !== 'admin') {
+          throw new ForbiddenException('Only admin can update user roles');
+        }
+        if (currentUser.id === id) {
+          throw new ForbiddenException('Admin cannot edit their own role');
+        }
       }
-    }
 
-    if (dto.password) {
-      dto.password = await bcrypt.hash(dto.password, 10);
-    }
+      if (dto.email && dto.email !== user.email) {
+        const existingUser = await this.userModel.findOne({
+          where: { email: dto.email },
+        });
+        if (existingUser) {
+          throw new ConflictException('Email already exists');
+        }
+      }
 
-    await user.update(dto);
-    return { message: 'User updated successfully' };
+      if (dto.password) {
+        dto.password = await bcrypt.hash(dto.password, 10);
+      }
+
+      await user.update(dto);
+      return { message: 'User updated successfully' };
+    } catch (error: any) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+
+      if (error.name === 'SequelizeValidationError') {
+        throw new BadRequestException('Invalid data provided');
+      }
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new ConflictException('Data already exists');
+      }
+
+      throw new InternalServerErrorException('Failed to update user');
+    }
   }
 
   async remove(id: number, currentUser: any) {
