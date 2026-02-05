@@ -47,25 +47,43 @@ export class UsersService {
     const user = await this.userModel.findByPk(id);
     if (!user) throw new NotFoundException('User not found');
 
-    if (currentUser.role === 'admin' && (dto.name || dto.email)) {
-      throw new ForbiddenException('Admin cannot update personal information');
-    }
+    const isOwnProfile = currentUser.sub === id;
 
-    if (currentUser.role === 'user' && currentUser.sub !== id) {
-      throw new ForbiddenException('User can update only own profile');
+    const hasPersonalUpdates = dto.name || dto.email || dto.password;
+
+    if (hasPersonalUpdates && !isOwnProfile) {
+      throw new ForbiddenException(
+        'You can only update your own personal information',
+      );
     }
 
     if (dto.role_id && currentUser.role !== 'admin') {
-      throw new ForbiddenException('Only admin can update role');
+      throw new ForbiddenException('Only admin can update user roles');
+    }
+    if (currentUser.role === 'admin' && currentUser.sub === id) {
+      throw new ForbiddenException('Admin cannot edit  their own role');
+    }
+
+    if (dto.password) {
+      dto.password = await bcrypt.hash(dto.password, 10);
     }
 
     await user.update(dto);
 
     return { message: 'User updated successfully' };
   }
-  async remove(id: number) {
+
+  async remove(id: number, currentUser: any) {
     const user = await this.userModel.findByPk(id);
     if (!user) throw new NotFoundException('User not found');
+
+    if (currentUser.role === 'admin' && currentUser.sub === id) {
+      throw new ForbiddenException('Admin cannot delete their own account');
+    }
+
+    if (currentUser.role !== 'admin') {
+      throw new ForbiddenException('Only admin can delete users');
+    }
 
     await user.destroy();
     return { message: 'User deleted successfully' };

@@ -22,10 +22,12 @@ import { JwtGuard } from 'src/common/guards/jwt.guard';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-  @UseGuards(PermissionGuard)
+  @UseGuards(JwtGuard, PermissionGuard)
   @Post()
   @RequirePermissions(1)
   create(@Body() dto: CreateUserDto) {
+    console.log(dto);
+
     return this.usersService.create(dto);
   }
 
@@ -51,10 +53,10 @@ export class UsersController {
     return this.usersService.update(id, dto, req.user);
   }
 
-  @UseGuards(PermissionGuard)
+  @UseGuards(JwtGuard, PermissionGuard)
   @Delete(':id')
   @RequirePermissions(4)
-  remove(@Param('id') id: number) {
-    return this.usersService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
+    return this.usersService.remove(id, req.user);
   }
 }

@@ -9,10 +9,11 @@ import { Role } from './models/role.model';
 import { RolePermission } from './models/role-permission.model';
 import { Permission } from 'src/permissions/permission.model';
 import { AuthModule } from 'src/auth/auth.module';
+import { User } from 'src/users/models/user.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([Role, RolePermission, Permission]),
+    SequelizeModule.forFeature([Role, RolePermission, Permission, User]),
     AuthModule,
   ],
   controllers: [RolesController],

@@ -7,6 +7,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 
@@ -15,6 +16,8 @@ import { RolePermission } from './models/role-permission.model';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { Permission } from 'src/permissions/permission.model';
+import { User } from '../users/models/user.model';
+
 @Injectable()
 export class RolesService {
   constructor(
@@ -22,6 +25,7 @@ export class RolesService {
     @InjectModel(Permission) private permissionModel: typeof Permission,
     @InjectModel(RolePermission)
     private rolePermissionModel: typeof RolePermission,
+    @InjectModel(User) private userModel: typeof User,
   ) {}
 
   async create(dto: CreateRoleDto) {
@@ -86,9 +90,17 @@ export class RolesService {
     const role = await this.roleModel.findByPk(id);
     if (!role) throw new NotFoundException('Role not found');
 
-    await this.rolePermissionModel.destroy({ where: { role_id: id } });
-    await role.destroy();
+    const usersWithRole = await this.userModel.count({
+      where: { role_id: id },
+    });
 
+    if (usersWithRole > 0) {
+      throw new ForbiddenException(
+        `Cannot delete role. ${usersWithRole} user(s) are assigned to this role. Please reassign users before deleting.`,
+      );
+    }
+
+    await role.destroy();
     return { message: 'Role deleted successfully' };
   }
 }

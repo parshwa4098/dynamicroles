@@ -19,14 +19,15 @@ export class PermissionGuard implements CanActivate {
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    console.log(requiredPermissionIds);
 
     if (!requiredPermissionIds || requiredPermissionIds.length === 0) {
       return true;
     }
 
     const request = context.switchToHttp().getRequest();
+
     const user = request.user;
-    console.log(user);
 
     if (!user || !Array.isArray(user.permissions)) {
       throw new ForbiddenException('Permissions not found, You are forbidden');

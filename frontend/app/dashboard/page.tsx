@@ -14,20 +14,23 @@ import StatCard from "../_components/StatCard";
 import { LuSave } from "react-icons/lu";
 import { TbEyeCancel } from "react-icons/tb";
 
-type RoleId = 1 | 2 | 3;
+interface Role {
+  id: number;
+  name: string;
+}
 
 interface User {
   id: number;
   name: string;
   email: string;
-  role_id: RoleId;
+  role_id: number;
 }
 
 interface NewUser {
   name: string;
   email: string;
   password: string;
-  role_id: RoleId;
+  role_id: number;
 }
 
 interface ProfileEdit {
@@ -37,9 +40,6 @@ interface ProfileEdit {
 }
 
 const API_URL = "http://localhost:5000";
-
-const roleIdToName = (id: RoleId) =>
-  id === 1 ? "admin" : id === 2 ? "manager" : "user";
 
 const getToken = () => {
   if (typeof window === "undefined") return null;
@@ -63,12 +63,13 @@ export default function Page() {
   const [loggedInUser, setLoggedInUser] = useState(getUser());
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [tempRoleId, setTempRoleId] = useState<RoleId>(3);
+  const [tempRoleId, setTempRoleId] = useState<number>(3);
   const [loading, setLoading] = useState(true);
 
   const [newUser, setNewUser] = useState<NewUser>({
@@ -84,6 +85,63 @@ export default function Page() {
     password: "",
   });
 
+  const getRoleName = (roleId: number) => {
+    const role = roles.find((r) => r.id === roleId);
+    return role ? role.name : "Unknown";
+  };
+
+  const refreshData = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const [usersRes, rolesRes] = await Promise.all([
+        fetch(`${API_URL}/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => res.json()),
+
+        fetch(`${API_URL}/roles`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => res.json()),
+      ]);
+
+      setAllUsers(usersRes.data || []);
+      setRoles(rolesRes.data || []);
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+    }
+  };
+
+  const hasSettingsAccess = () => {
+    if (!loggedInUser || roles.length === 0) return false;
+
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    console.log("current user", currentUser);
+    console.log("logged in user",loggedInUser);
+    
+
+    if (!currentUser) {
+      return loggedInUser.role === "admin" || loggedInUser.role === "manager";
+    }
+
+    const userRole = getRoleName(currentUser.role_id).toLowerCase();
+    console.log(userRole);
+
+    return userRole === "admin" || userRole === "manager";
+  };
+
+  const isAdmin = () => {
+    if (!loggedInUser || roles.length === 0) return false;
+
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    if (!currentUser) {
+      return loggedInUser.role === "admin";
+    }
+
+    const userRole = getRoleName(currentUser.role_id).toLowerCase();
+    return userRole === "admin";
+  };
+
   useEffect(() => {
     const token = getToken();
     const user = getUser();
@@ -96,21 +154,37 @@ export default function Page() {
 
     setLoggedInUser(user);
 
-    fetch(`${API_URL}/users`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((res) => {
-        setAllUsers(res.data || []);
+    Promise.all([
+      fetch(`${API_URL}/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((res) => res.json()),
+
+      fetch(`${API_URL}/roles`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((res) => res.json()),
+    ])
+      .then(([usersRes, rolesRes]) => {
+        setAllUsers(usersRes.data || []);
+        setRoles(rolesRes.data || []);
         setLoading(false);
       })
       .catch(() => {
-        toast.error("Failed to load users");
+        toast.error("Failed to load data");
         setLoading(false);
       });
   }, [router]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      refreshData();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -129,9 +203,11 @@ export default function Page() {
     router.replace("/auth/login");
   };
 
-  const handleSettings = () => {
-    if (loggedInUser?.role === "admin" || loggedInUser?.role === "manager") {
-      router.push('/settings');
+  const handleSettings = async () => {
+    await refreshData();
+
+    if (hasSettingsAccess()) {
+      router.push("/settings");
     } else {
       toast.error("Access denied. Admin or Manager role required.");
     }
@@ -158,7 +234,7 @@ export default function Page() {
         updateData.password = profileEdit.password;
       }
 
-      const res = await fetch(`${API_URL}/users/${loggedInUser.id}`, {
+      const res = await fetch(`${API_URL}/users/${loggedInUser.sub}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -170,16 +246,16 @@ export default function Page() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      
       const updatedUser = { ...loggedInUser, ...updateData };
       localStorage.setItem("user", JSON.stringify(updatedUser));
       setLoggedInUser(updatedUser);
 
-      
       setAllUsers((prev) =>
         prev.map((u) =>
-          u.id === loggedInUser.id ? { ...u, name: profileEdit.name, email: profileEdit.email } : u
-        )
+          u.id === loggedInUser.sub
+            ? { ...u, name: profileEdit.name, email: profileEdit.email }
+            : u,
+        ),
       );
 
       toast.success("Profile updated successfully");
@@ -212,7 +288,7 @@ export default function Page() {
         name: "",
         email: "",
         password: "password",
-        role_id: 3,
+        role_id: roles.length > 0 ? roles[0].id : 3,
       });
     } catch (err: any) {
       toast.error(err.message || "Add failed");
@@ -253,7 +329,7 @@ export default function Page() {
 
       setAllUsers((prev) =>
         prev.map((u, i) =>
-          i === index ? { ...u, role_id: Number(tempRoleId) as RoleId } : u,
+          i === index ? { ...u, role_id: Number(tempRoleId) } : u,
         ),
       );
 
@@ -278,7 +354,8 @@ export default function Page() {
         },
       });
 
-      if (!res.ok) throw new Error("Delete failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Delete failed");
 
       setAllUsers((prev) => prev.filter((_, i) => i !== deleteIndex));
       toast.success("User deleted");
@@ -289,16 +366,28 @@ export default function Page() {
     }
   };
 
+  const roleStats = roles.map((role) => ({
+    title: `${role.name}s`,
+    value: allUsers.filter((u) => u.role_id === role.id).length,
+    color: "",
+  }));
+
+  const getCurrentUserRole = () => {
+    const currentUser = allUsers.find((u) => u.id === loggedInUser.sub);
+    if (currentUser) {
+      return getRoleName(currentUser.role_id);
+    }
+    return loggedInUser.role;
+  };
+
   return (
     <div className="bg-black text-white min-h-screen p-6">
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
           <FaUserCircle className="text-5xl text-gray-400" />
           <div>
-            <h1 className="text-2xl">
-              Welcome {loggedInUser?.name}
-            </h1>
-            <p className="text-purple-400 capitalize">{loggedInUser?.role}</p>
+            <h1 className="text-2xl">Welcome {loggedInUser?.name}</h1>
+            <p className="text-purple-400 capitalize">{getCurrentUserRole()}</p>
           </div>
         </div>
 
@@ -310,7 +399,7 @@ export default function Page() {
             <FaEdit /> Edit Profile
           </button>
 
-          {loggedInUser?.role === "admin" && (
+          {isAdmin() && (
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 bg-yellow-500/10 text-yellow-400 px-4 py-2 rounded-lg hover:bg-yellow-500/20 transition-colors"
@@ -319,13 +408,13 @@ export default function Page() {
             </button>
           )}
 
-          {(loggedInUser?.role === "admin" || loggedInUser?.role === "manager") && (
+          {hasSettingsAccess() && (
             <button
               onClick={handleSettings}
               className="flex items-center gap-2 bg-green-500/10 text-green-500 px-4 py-2 rounded-lg hover:bg-green-500/20 transition-colors"
             >
               <MdOutlineSettings />
-              Settings
+              Roles
             </button>
           )}
 
@@ -341,53 +430,49 @@ export default function Page() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard title="Total Users" value={allUsers.length} color="" />
-        <StatCard
-          title="Admins"
-          value={allUsers.filter((u) => u.role_id === 1).length}
-          color=""
-        />
-        <StatCard
-          title="Managers"
-          value={allUsers.filter((u) => u.role_id === 2).length}
-          color=""
-        />
-        <StatCard
-          title="Users"
-          value={allUsers.filter((u) => u.role_id === 3).length}
-          color=""
-        />
+        {roleStats.slice(0, 3).map((stat, index) => (
+          <StatCard
+            key={index}
+            title={stat.title}
+            value={stat.value}
+            color={stat.color}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {allUsers.map((u, index) => (
-          <div key={u.id} className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
+          <div
+            key={u.id}
+            className="border border-gray-700 rounded-lg p-4 bg-gray-900/40"
+          >
             <h3 className="font-semibold">{u.name}</h3>
             <p className="text-gray-400 text-sm">{u.email}</p>
 
             <div className="mt-2">
               <span className="text-xs capitalize text-purple-400">
-                {roleIdToName(u.role_id)}
+                {getRoleName(u.role_id)}
               </span>
               {editingIndex === index && (
                 <select
                   value={tempRoleId}
-                  onChange={(e) =>
-                    setTempRoleId(Number(e.target.value) as RoleId)
-                  }
+                  onChange={(e) => setTempRoleId(Number(e.target.value))}
                   className="mt-2 w-full bg-black border border-gray-600 text-white p-1 rounded"
                 >
-                  <option value={1}>Admin</option>
-                  <option value={2}>Manager</option>
-                  <option value={3}>User</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
 
-            {loggedInUser?.role === "admin" && (
+            {isAdmin() && (
               <div className="flex justify-end gap-3 mt-3">
                 {editingIndex === index ? (
                   <>
-                    <button 
+                    <button
                       onClick={() => handleEditUser(index)}
                       className="hover:scale-110 transition-transform"
                     >
@@ -433,7 +518,6 @@ export default function Page() {
         ))}
       </div>
 
-      
       <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)}>
         <div className="bg-gray-900 p-6 rounded-xl text-white">
           <h2 className="text-xl font-bold mb-4">Add New User</h2>
@@ -445,36 +529,42 @@ export default function Page() {
               className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
               onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
             />
-            
+
             <input
               placeholder="Email Address"
               type="email"
               value={newUser.email}
               className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+              onChange={(e) =>
+                setNewUser({ ...newUser, email: e.target.value })
+              }
             />
-            
+
             <input
               placeholder="Password"
               type="password"
               value={newUser.password}
               className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              onChange={(e) =>
+                setNewUser({ ...newUser, password: e.target.value })
+              }
             />
-            
+
             <select
               value={newUser.role_id}
               className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
               onChange={(e) =>
                 setNewUser({
                   ...newUser,
-                  role_id: Number(e.target.value) as RoleId,
+                  role_id: Number(e.target.value),
                 })
               }
             >
-              <option value={1}>Admin</option>
-              <option value={2}>Manager</option>
-              <option value={3}>User</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -495,7 +585,6 @@ export default function Page() {
         </div>
       </Modal>
 
-      
       <Modal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
         <div className="bg-gray-900 p-6 rounded-xl text-white">
           <h2 className="text-xl font-bold mb-4">Delete User</h2>
@@ -506,7 +595,7 @@ export default function Page() {
             </span>
             ? This action cannot be undone.
           </p>
-          
+
           <div className="flex gap-3">
             <button
               onClick={handleDeleteConfirm}
@@ -527,31 +616,41 @@ export default function Page() {
         </div>
       </Modal>
 
-      
-      <Modal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)}>
+      <Modal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      >
         <div className="bg-gray-900 p-6 rounded-xl text-white">
           <h2 className="text-xl font-bold mb-4">Edit Profile</h2>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Full Name</label>
+              <label className="block text-sm font-medium mb-1">
+                Full Name
+              </label>
               <input
                 value={profileEdit.name}
                 className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-                onChange={(e) => setProfileEdit({ ...profileEdit, name: e.target.value })}
+                onChange={(e) =>
+                  setProfileEdit({ ...profileEdit, name: e.target.value })
+                }
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium mb-1">Email Address</label>
+              <label className="block text-sm font-medium mb-1">
+                Email Address
+              </label>
               <input
                 type="email"
                 value={profileEdit.email}
                 className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-                onChange={(e) => setProfileEdit({ ...profileEdit, email: e.target.value })}
+                onChange={(e) =>
+                  setProfileEdit({ ...profileEdit, email: e.target.value })
+                }
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 New Password (leave blank to keep current)
@@ -561,13 +660,18 @@ export default function Page() {
                 value={profileEdit.password}
                 placeholder="Enter new password"
                 className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-                onChange={(e) => setProfileEdit({ ...profileEdit, password: e.target.value })}
+                onChange={(e) =>
+                  setProfileEdit({ ...profileEdit, password: e.target.value })
+                }
               />
             </div>
 
             <div className="bg-gray-800 p-3 rounded-lg">
               <p className="text-sm text-gray-400">
-                <strong>Current Role:</strong> <span className="text-purple-400 capitalize">{loggedInUser.role}</span>
+                <strong>Current Role:</strong>{" "}
+                <span className="text-purple-400 capitalize">
+                  {getCurrentUserRole()}
+                </span>
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Role can only be changed by an admin
