@@ -41,7 +41,6 @@ export default function LoginPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-
     const checkAuth = () => {
       if (isAuthenticated()) {
         router.replace("/dashboard");
@@ -50,12 +49,10 @@ export default function LoginPage() {
       }
     };
 
-
     const timer = setTimeout(checkAuth, 100);
     return () => clearTimeout(timer);
   }, [router]);
 
-  
   if (isCheckingAuth) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-black">
@@ -91,7 +88,6 @@ export default function LoginPage() {
 
       router.replace("/dashboard");
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Login failed");
     } finally {
       setLoading(false);
@@ -155,7 +151,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="lg:w-96 w-full">
           <div className="bg-black border border-gray-800 p-8 rounded-2xl shadow-2xl">
             <h2 className="text-2xl font-semibold mb-6 text-center text-white">
@@ -184,7 +180,9 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="text-sm mb-1 block text-white">Password</label>
+                <label className="text-sm mb-1 block text-white">
+                  Password
+                </label>
                 <div className="relative">
                   <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input

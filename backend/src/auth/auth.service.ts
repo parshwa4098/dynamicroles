@@ -13,7 +13,7 @@ import * as bcrypt from 'bcrypt';
 
 import { User } from '../users/models/user.model';
 import { Role } from '../roles/models/role.model';
-import { Permission } from '../permissions/permission.model';
+import { Permission } from '../permissions/models/permission.model';
 
 @Injectable()
 export class AuthService {
@@ -52,16 +52,12 @@ export class AuthService {
     });
 
     if (!user || !user.password) {
-      throw new UnauthorizedException(
-        'Invalid credentials or role not assigned',
-      );
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.password);
     if (!passwordMatch) {
-      throw new UnauthorizedException(
-        'Invalid credentials or role not assigned',
-      );
+      throw new UnauthorizedException('Invalid credentials ');
     }
 
     const role = await this.roleModel.findByPk(user.role_id, {

@@ -18,10 +18,12 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import { PermissionGuard } from 'src/common/guards/permission.guard';
 import { JwtGuard } from 'src/common/guards/jwt.guard';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('roles')
 @Controller('roles')
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
+
   @UseGuards(JwtGuard, PermissionGuard)
   @Post()
   @RequirePermissions(5)

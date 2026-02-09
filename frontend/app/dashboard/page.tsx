@@ -71,6 +71,7 @@ export default function Page() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [tempRoleId, setTempRoleId] = useState<number>(3);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<any>({});
 
   const [newUser, setNewUser] = useState<NewUser>({
     name: "",
@@ -263,6 +264,7 @@ export default function Page() {
 
       toast.success("Profile updated successfully");
       setShowProfileModal(false);
+      setErrors({});
     } catch (err: any) {
       toast.error(err.message || "Update failed");
     }

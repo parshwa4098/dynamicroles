@@ -5,10 +5,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { FaUserShield, FaArrowLeft } from "react-icons/fa";
-import { MdDelete, MdEdit } from "react-icons/md";
-import { LuSave } from "react-icons/lu";
-import { TbEyeCancel } from "react-icons/tb";
+import { FaUserShield, FaArrowLeft, FaKey } from "react-icons/fa";
+import { MdDelete, MdEdit, MdAdd } from "react-icons/md";
 
 const API_URL = "http://localhost:5000";
 
@@ -29,17 +27,6 @@ interface User {
   email: string;
   role_id: number;
 }
-
-const FIXED_PERMISSIONS = [
-  { id: 1, name: "Create User" },
-  { id: 2, name: "View Users" },
-  { id: 3, name: "Update User" },
-  { id: 4, name: "Delete User" },
-  { id: 5, name: "Create Role" },
-  { id: 6, name: "View Roles" },
-  { id: 7, name: "Update Role" },
-  { id: 8, name: "Delete Role" },
-];
 
 const getToken = () => {
   if (typeof window === "undefined") return null;
@@ -63,16 +50,28 @@ export default function SettingsPage() {
   const [loggedInUser, setLoggedInUser] = useState(getUser());
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [activeTab, setActiveTab] = useState<"roles" | "permissions">("roles");
+
   const [newRole, setNewRole] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState("");
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [editingRoleName, setEditingRoleName] = useState("");
+  const [isRoleEditMode, setIsRoleEditMode] = useState(false);
 
-  // Delete modal states
+  const [newPermission, setNewPermission] = useState("");
+  const [editingPermissionId, setEditingPermissionId] = useState<number | null>(
+    null,
+  );
+  const [editingPermissionName, setEditingPermissionName] = useState("");
+  const [isPermissionEditMode, setIsPermissionEditMode] = useState(false);
+
+  const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{
+    type: "role" | "permission";
+    item: Role | Permission;
+  } | null>(null);
 
   const getRoleName = (roleId: number) => {
     const role = roles.find((r) => r.id === roleId);
@@ -81,7 +80,6 @@ export default function SettingsPage() {
 
   const isAdmin = () => {
     if (!loggedInUser || roles.length === 0) return false;
-
     const currentUser = allUsers.find(
       (u) => u.id === loggedInUser.sub || u.id === loggedInUser.id,
     );
@@ -89,7 +87,6 @@ export default function SettingsPage() {
       const userRole = getRoleName(currentUser.role_id).toLowerCase();
       return userRole === "admin";
     }
-
     return loggedInUser.role === "admin";
   };
 
@@ -128,10 +125,22 @@ export default function SettingsPage() {
         if (!res.ok) throw new Error("Failed to fetch roles");
         return res.json();
       }),
+
+      fetch(`${API_URL}/permissions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch permissions");
+        return res.json();
+      }),
     ])
-      .then(([usersRes, rolesRes]) => {
+      .then(([usersRes, rolesRes, permissionsRes]) => {
         setAllUsers(usersRes.data || []);
         setRoles(rolesRes.data || []);
+
+        const permissionsData =
+          permissionsRes.data?.data || permissionsRes.data || [];
+        setPermissions(permissionsData);
+
         setLoading(false);
       })
       .catch((error) => {
@@ -180,7 +189,6 @@ export default function SettingsPage() {
 
     try {
       const token = getToken();
-
       const res = await fetch(`${API_URL}/roles`, {
         method: "POST",
         headers: {
@@ -211,7 +219,7 @@ export default function SettingsPage() {
       return;
     }
 
-    if (!editingName.trim()) {
+    if (!editingRoleName.trim()) {
       toast.error("Role name cannot be empty");
       return;
     }
@@ -223,15 +231,14 @@ export default function SettingsPage() {
 
     try {
       const token = getToken();
-
-      const res = await fetch(`${API_URL}/roles/${editingId}`, {
+      const res = await fetch(`${API_URL}/roles/${editingRoleId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: editingName.trim(),
+          name: editingRoleName.trim(),
           permissions: selectedPermissions,
         }),
       });
@@ -241,11 +248,11 @@ export default function SettingsPage() {
 
       setRoles((prev) =>
         prev.map((r) =>
-          r.id === editingId
+          r.id === editingRoleId
             ? {
                 ...r,
-                name: editingName.trim(),
-                permissions: FIXED_PERMISSIONS.filter((p) =>
+                name: editingRoleName.trim(),
+                permissions: permissions.filter((p) =>
                   selectedPermissions.includes(p.id),
                 ),
               }
@@ -253,10 +260,9 @@ export default function SettingsPage() {
         ),
       );
 
-      // Reset to create mode
-      setIsEditMode(false);
-      setEditingId(null);
-      setEditingName("");
+      setIsRoleEditMode(false);
+      setEditingRoleId(null);
+      setEditingRoleName("");
       setNewRole("");
       setSelectedPermissions([]);
       toast.success("Role updated successfully");
@@ -265,47 +271,171 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteClick = (role: Role) => {
+  const handleEditRole = (role: Role) => {
+    setIsRoleEditMode(true);
+    setEditingRoleId(role.id);
+    setEditingRoleName(role.name);
+    setNewRole(role.name);
+    setSelectedPermissions(role.permissions?.map((p) => p.id) || []);
+  };
+
+  const handleCancelRoleEdit = () => {
+    setIsRoleEditMode(false);
+    setEditingRoleId(null);
+    setEditingRoleName("");
+    setNewRole("");
+    setSelectedPermissions([]);
+  };
+
+  const handleAddPermission = async () => {
+    if (!newPermission.trim()) {
+      toast.error("Permission name required");
+      return;
+    }
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/permissions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newPermission.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.message || "Failed to create permission");
+
+      const newPermissionData = data.data?.data || data.data || data;
+      setPermissions((prev) => [...prev, newPermissionData]);
+      setNewPermission("");
+      toast.success("Permission created successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Create failed");
+    }
+  };
+
+  const handleEditPermission = (permission: Permission) => {
+    setIsPermissionEditMode(true);
+    setEditingPermissionId(permission.id);
+    setEditingPermissionName(permission.name);
+    setNewPermission(permission.name);
+  };
+
+  const handleUpdatePermission = async () => {
     if (!isAdmin()) {
-      toast.error("Only admin can delete roles");
+      toast.error("Only admin can update permissions");
       return;
     }
 
-    const usersWithRole = allUsers.filter((user) => user.role_id === role.id);
-    if (usersWithRole.length > 0) {
-      toast.error(
-        `Cannot delete role. ${usersWithRole.length} user(s) still have this role.`,
+    if (!editingPermissionName.trim()) {
+      toast.error("Permission name cannot be empty");
+      return;
+    }
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/permissions/${editingPermissionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: editingPermissionName.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Update failed");
+
+      setPermissions((prev) =>
+        prev.map((p) =>
+          p.id === editingPermissionId
+            ? { ...p, name: editingPermissionName.trim() }
+            : p,
+        ),
       );
+
+      setIsPermissionEditMode(false);
+      setEditingPermissionId(null);
+      setEditingPermissionName("");
+      setNewPermission("");
+      toast.success("Permission updated successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Update failed");
+    }
+  };
+
+  const handleCancelPermissionEdit = () => {
+    setIsPermissionEditMode(false);
+    setEditingPermissionId(null);
+    setEditingPermissionName("");
+    setNewPermission("");
+  };
+
+  const handleDeleteClick = (
+    type: "role" | "permission",
+    item: Role | Permission,
+  ) => {
+    if (!isAdmin()) {
+      toast.error("Only admin can delete items");
       return;
     }
 
-    setRoleToDelete(role);
+    if (type === "role") {
+      const usersWithRole = allUsers.filter((user) => user.role_id === item.id);
+      if (usersWithRole.length > 0) {
+        toast.error(
+          `Cannot delete role. ${usersWithRole.length} user(s) still have this role.`,
+        );
+        return;
+      }
+    }
+
+    setItemToDelete({ type, item });
     setShowDeleteModal(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!roleToDelete) return;
+    if (!itemToDelete) return;
 
     try {
       const token = getToken();
+      const endpoint = itemToDelete.type === "role" ? "roles" : "permissions";
 
-      const res = await fetch(`${API_URL}/roles/${roleToDelete.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_URL}/${endpoint}/${itemToDelete.item.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       const data = await res.json();
-
       if (!res.ok) {
         throw new Error(data.message || "Delete failed");
       }
 
-      setRoles((prev) => prev.filter((r) => r.id !== roleToDelete.id));
-      toast.success("Role deleted successfully");
+      if (itemToDelete.type === "role") {
+        setRoles((prev) => prev.filter((r) => r.id !== itemToDelete.item.id));
+      } else {
+        setPermissions((prev) =>
+          prev.filter((p) => p.id !== itemToDelete.item.id),
+        );
+      }
+
+      toast.success(
+        `${itemToDelete.type === "role" ? "Role" : "Permission"} deleted successfully`,
+      );
       setShowDeleteModal(false);
-      setRoleToDelete(null);
+      setItemToDelete(null);
     } catch (err: any) {
       toast.error(err.message || "Delete failed");
     }
@@ -313,32 +443,12 @@ export default function SettingsPage() {
 
   const handleDeleteCancel = () => {
     setShowDeleteModal(false);
-    setRoleToDelete(null);
+    setItemToDelete(null);
   };
 
   const handleBackToDashboard = () => {
     window.dispatchEvent(new Event("dashboard-refresh"));
     router.push("/dashboard");
-  };
-
-  const getRolePermissions = (role: Role) => {
-    return role.permissions?.map((p) => p.id) || [];
-  };
-
-  const handleEditRole = (role: Role) => {
-    setIsEditMode(true);
-    setEditingId(role.id);
-    setEditingName(role.name);
-    setNewRole(role.name);
-    setSelectedPermissions(getRolePermissions(role));
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditMode(false);
-    setEditingId(null);
-    setEditingName("");
-    setNewRole("");
-    setSelectedPermissions([]);
   };
 
   return (
@@ -355,143 +465,273 @@ export default function SettingsPage() {
           Roles Management
           {!isAdmin() && (
             <span className="text-sm text-gray-400 block">
-              ({getCurrentUserRole()} - Create roles only)
+              ({getCurrentUserRole()} - Limited access)
             </span>
           )}
         </h1>
       </div>
 
-      <div className="bg-gray-900/40 border border-gray-700 rounded-xl p-6 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">
-          {isEditMode ? "Edit Role" : "Create New Role"}
-        </h2>
-
-        <input
-          value={isEditMode ? editingName : newRole}
-          onChange={(e) =>
-            isEditMode
-              ? setEditingName(e.target.value)
-              : setNewRole(e.target.value)
-          }
-          placeholder="Enter role name (e.g., superadmin, editor)"
-          className="w-full bg-black border border-gray-700 p-3 rounded-lg text-white mb-4"
-        />
-
-        <div className="mb-4">
-          <h3 className="text-white mb-3">Select Permissions:</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {FIXED_PERMISSIONS.map((permission) => (
-              <label
-                key={permission.id}
-                className="flex items-center gap-3 text-white cursor-pointer bg-gray-800/50 p-3 rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPermissions.includes(permission.id)}
-                  onChange={() => handlePermissionToggle(permission.id)}
-                  className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
-                />
-                <span className="text-sm font-medium">{permission.name}</span>
-              </label>
-            ))}
-          </div>
-
-          {selectedPermissions.length > 0 && (
-            <div className="mt-3 p-3 bg-purple-500/10 rounded-lg">
-              <p className="text-purple-300 text-sm">
-                Selected: {selectedPermissions.length} permission
-                {selectedPermissions.length > 1 ? "s" : ""}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3">
-          {isEditMode ? (
-            <>
-              <button
-                onClick={handleUpdateRole}
-                disabled={
-                  !editingName.trim() || selectedPermissions.length === 0
-                }
-                className="bg-green-500/20 text-green-400 px-6 py-3 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Update Role
-              </button>
-              <button
-                onClick={handleCancelEdit}
-                className="bg-red-500/20 text-red-400 px-6 py-3 rounded-lg hover:bg-red-500/30 transition-colors"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleAddRole}
-              disabled={!newRole.trim() || selectedPermissions.length === 0}
-              className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Create Role
-            </button>
-          )}
-        </div>
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setActiveTab("roles")}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            activeTab === "roles"
+              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+              : "bg-gray-800/50 text-gray-400 hover:text-white"
+          }`}
+        >
+          <FaUserShield className="inline mr-2" />
+          Roles
+        </button>
+        <button
+          onClick={() => setActiveTab("permissions")}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            activeTab === "permissions"
+              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+              : "bg-gray-800/50 text-gray-400 hover:text-white"
+          }`}
+        >
+          <FaKey className="inline mr-2" />
+          Permissions
+        </button>
       </div>
 
-      {roles.length === 0 ? (
-        <div className="text-gray-500 text-center py-10 border border-gray-800 rounded-xl">
-          No roles found
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {roles.map((role) => (
-            <div
-              key={role.id}
-              className="border border-gray-700 rounded-xl p-5 bg-gray-900/40"
-            >
-              <h3 className="text-lg font-semibold text-white capitalize">
-                {role.name}
-              </h3>
+      {activeTab === "roles" && (
+        <>
+          <div className="bg-gray-900/40 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              {isRoleEditMode ? "Edit Role" : "Create New Role"}
+            </h2>
 
-              <div className="flex justify-end gap-4 mt-4">
-                {isAdmin() ? (
-                  <>
-                    <button
-                      onClick={() => handleEditRole(role)}
-                      disabled={isEditMode}
-                      className="disabled:opacity-50"
-                    >
-                      <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
-                    </button>
+            <input
+              value={isRoleEditMode ? editingRoleName : newRole}
+              onChange={(e) =>
+                isRoleEditMode
+                  ? setEditingRoleName(e.target.value)
+                  : setNewRole(e.target.value)
+              }
+              placeholder="Enter role name"
+              className="w-full bg-black border border-gray-700 p-3 rounded-lg text-white mb-4"
+            />
 
-                    <button
-                      onClick={() => handleDeleteClick(role)}
-                      disabled={isEditMode}
-                      className="disabled:opacity-50"
-                    >
-                      <MdDelete className="text-red-400 text-xl hover:text-red-300" />
-                    </button>
-                  </>
-                ) : (
-                  <span className="text-gray-500 text-sm">View only</span>
-                )}
+            <div className="mb-4">
+              <h3 className="text-white mb-3">Select Permissions:</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {permissions.map((permission) => (
+                  <label
+                    key={permission.id}
+                    className="flex items-center gap-3 text-white cursor-pointer bg-gray-800/50 p-3 rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPermissions.includes(permission.id)}
+                      onChange={() => handlePermissionToggle(permission.id)}
+                      className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
+                    />
+                    <span className="text-sm font-medium">
+                      {permission.name}
+                    </span>
+                  </label>
+                ))}
               </div>
+
+              {selectedPermissions.length > 0 && (
+                <div className="mt-3 p-3 bg-purple-500/10 rounded-lg">
+                  <p className="text-purple-300 text-sm">
+                    Selected: {selectedPermissions.length} permission
+                    {selectedPermissions.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+
+            <div className="flex gap-3">
+              {isRoleEditMode ? (
+                <>
+                  <button
+                    onClick={handleUpdateRole}
+                    disabled={
+                      !editingRoleName.trim() ||
+                      selectedPermissions.length === 0
+                    }
+                    className="bg-green-500/20 text-green-400 px-6 py-3 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Update Role
+                  </button>
+                  <button
+                    onClick={handleCancelRoleEdit}
+                    className="bg-red-500/20 text-red-400 px-6 py-3 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleAddRole}
+                  disabled={!newRole.trim() || selectedPermissions.length === 0}
+                  className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Role
+                </button>
+              )}
+            </div>
+          </div>
+
+          {roles.length === 0 ? (
+            <div className="text-gray-500 text-center py-10 border border-gray-800 rounded-xl">
+              No roles found
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {roles.map((role) => (
+                <div
+                  key={role.id}
+                  className="border border-gray-700 rounded-xl p-5 bg-gray-900/40"
+                >
+                  <h3 className="text-lg font-semibold text-white capitalize mb-2">
+                    {role.name}
+                  </h3>
+
+                  <div className="flex justify-end gap-4 mt-4">
+                    {isAdmin() ? (
+                      <>
+                        <button
+                          onClick={() => handleEditRole(role)}
+                          disabled={isRoleEditMode}
+                          className="disabled:opacity-50"
+                        >
+                          <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteClick("role", role)}
+                          disabled={isRoleEditMode}
+                          className="disabled:opacity-50"
+                        >
+                          <MdDelete className="text-red-400 text-xl hover:text-red-300" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-500 text-sm">View only</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && roleToDelete && (
+      {activeTab === "permissions" && (
+        <>
+          <div className="bg-gray-900/40 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              {isPermissionEditMode
+                ? "Edit Permission"
+                : "Create New Permission"}
+            </h2>
+
+            <div className="flex gap-3">
+              <input
+                value={
+                  isPermissionEditMode ? editingPermissionName : newPermission
+                }
+                onChange={(e) =>
+                  isPermissionEditMode
+                    ? setEditingPermissionName(e.target.value)
+                    : setNewPermission(e.target.value)
+                }
+                placeholder="Enter permission name"
+                className="flex-1 bg-black border border-gray-700 p-3 rounded-lg text-white"
+              />
+
+              {isPermissionEditMode ? (
+                <>
+                  <button
+                    onClick={handleUpdatePermission}
+                    disabled={!editingPermissionName.trim()}
+                    className="bg-green-500/20 text-green-400 px-6 py-3 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Update
+                  </button>
+                  <button
+                    onClick={handleCancelPermissionEdit}
+                    className="bg-red-500/20 text-red-400 px-6 py-3 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleAddPermission}
+                  disabled={!newPermission.trim()}
+                  className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MdAdd className="inline mr-1" />
+                  Add
+                </button>
+              )}
+            </div>
+          </div>
+
+          {permissions.length === 0 ? (
+            <div className="text-gray-500 text-center py-10 border border-gray-800 rounded-xl">
+              No permissions found
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {permissions.map((permission) => (
+                <div
+                  key={permission.id}
+                  className="border border-gray-700 rounded-xl p-5 bg-gray-900/40"
+                >
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    {permission.name}
+                  </h3>
+
+                  <div className="flex justify-end gap-4 mt-4">
+                    {isAdmin() ? (
+                      <>
+                        <button
+                          onClick={() => handleEditPermission(permission)}
+                          disabled={isPermissionEditMode}
+                          className="disabled:opacity-50"
+                        >
+                          <MdEdit className="text-blue-400 text-xl hover:text-blue-300" />
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleDeleteClick("permission", permission)
+                          }
+                          disabled={isPermissionEditMode}
+                          className="disabled:opacity-50"
+                        >
+                          <MdDelete className="text-red-400 text-xl hover:text-red-300" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-500 text-sm">View only</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {showDeleteModal && itemToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-semibold text-white mb-4">
-              Delete Role
+              Delete {itemToDelete.type === "role" ? "Role" : "Permission"}
             </h3>
 
             <p className="text-gray-300 mb-6">
-              Are you sure you want to delete the role{" "}
+              Are you sure you want to delete the {itemToDelete.type}{" "}
               <span className="text-red-400 font-semibold">
-                &quot;{roleToDelete.name}&quot;
+                &quot;{itemToDelete.item.name}&quot;
               </span>
               ? This action cannot be undone.
             </p>

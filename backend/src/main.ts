@@ -11,7 +11,7 @@ async function bootstrap() {
     .setTitle('Rbac')
     .setDescription('rbac api description')
     .setVersion('1.0')
-    .addTag('cats')
+    .addTag('rbac')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);

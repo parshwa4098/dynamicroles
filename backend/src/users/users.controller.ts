@@ -18,7 +18,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import { PermissionGuard } from 'src/common/guards/permission.guard';
 import { JwtGuard } from 'src/common/guards/jwt.guard';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

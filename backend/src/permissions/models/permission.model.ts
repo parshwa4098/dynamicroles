@@ -7,8 +7,8 @@ import {
   Model,
   Table,
 } from 'sequelize-typescript';
-import { Role } from '../roles/models/role.model';
-import { RolePermission } from '../roles/models/role-permission.model';
+import { Role } from '../../roles/models/role.model';
+import { RolePermission } from '../../roles/models/role-permission.model';
 
 @Table({ tableName: 'permissions', timestamps: false })
 export class Permission extends Model {

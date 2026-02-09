@@ -28,6 +28,11 @@ export class PermissionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
 
     const user = request.user;
+    console.log(user);
+
+    if (user.role === 'admin') {
+      return true;
+    }
 
     if (!user || !Array.isArray(user.permissions)) {
       throw new ForbiddenException('Permissions not found, You are forbidden');
@@ -38,7 +43,9 @@ export class PermissionGuard implements CanActivate {
     );
 
     if (!hasAllPermissions) {
-      throw new ForbiddenException('Insufficient permissions');
+      throw new ForbiddenException(
+        'You are not eligible for performing such actions',
+      );
     }
     return true;
   }

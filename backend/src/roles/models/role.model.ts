@@ -10,7 +10,7 @@ import {
   BelongsToMany,
 } from 'sequelize-typescript';
 import { Optional } from 'sequelize';
-import { Permission } from '../../permissions/permission.model';
+import { Permission } from '../../permissions/models/permission.model';
 import { RolePermission } from './role-permission.model';
 
 export interface RoleAttributes {

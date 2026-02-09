@@ -33,7 +33,7 @@ export class JwtGuard implements CanActivate {
 
       request.user = decoded;
       return true;
-    } catch (err) {
+    } catch (err: any) {
       throw new UnauthorizedException('Invalid or expired token', err.message);
     }
   }

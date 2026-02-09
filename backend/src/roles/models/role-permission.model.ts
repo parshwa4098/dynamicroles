@@ -10,7 +10,7 @@ import {
 } from 'sequelize-typescript';
 import { Optional } from 'sequelize';
 import { Role } from './role.model';
-import { Permission } from '../../permissions/permission.model';
+import { Permission } from '../../permissions/models/permission.model';
 
 export interface RolePermissionAttributes {
   role_id: number;

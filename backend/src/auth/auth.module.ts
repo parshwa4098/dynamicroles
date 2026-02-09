@@ -10,7 +10,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { User } from '../users/models/user.model';
 import { Role } from '../roles/models/role.model';
-import { Permission } from '../permissions/permission.model';
+import { Permission } from '../permissions/models/permission.model';
 import { RolePermission } from '../roles/models/role-permission.model';
 
 @Module({
