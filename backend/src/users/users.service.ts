@@ -31,10 +31,14 @@ export class UsersService {
     }
     const hash = await bcrypt.hash(dto.password, 10);
 
-    return this.userModel.create({
+    const users = await this.userModel.create({
       ...dto,
       password: hash,
+      role_id: 40,
     });
+    console.log(users);
+
+    return users;
   }
 
   async findAll() {

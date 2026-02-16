@@ -18,6 +18,12 @@ export class Permission extends Model {
   @Column({ type: DataType.STRING, allowNull: false, unique: true })
   declare name: string;
 
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare action: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare resource: string;
+
   @BelongsToMany(() => Role, () => RolePermission)
   roles!: Role[];
 }

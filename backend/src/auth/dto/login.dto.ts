@@ -15,7 +15,7 @@ export class LoginDto {
   })
   @IsNotEmpty()
   @IsEmail()
-  email: string;
+  declare email: string;
   @ApiProperty({
     description: `password of the user`,
     example: `admin123`,
@@ -24,5 +24,5 @@ export class LoginDto {
   @MinLength(3, { message: `Password must be atleast 3 characters` })
   @MaxLength(20, { message: `Password must be atmost 20 characters` })
   @IsString()
-  password: string;
+  declare password: string;
 }

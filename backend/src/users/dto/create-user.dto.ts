@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsInt, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -7,23 +13,24 @@ export class CreateUserDto {
     example: 'parshwa',
   })
   @IsString()
-  name: string;
+  declare name: string;
   @ApiProperty({
     description: 'email',
     example: 'parshwa@gmail.com',
   })
   @IsEmail()
-  email: string;
+  declare email: string;
   @ApiProperty({
     description: 'password',
     example: 'parshwa123',
   })
   @MinLength(6)
-  password: string;
+  declare password: string;
   @ApiProperty({
     description: 'by default normal user role id given',
-    example: '3',
+    example: '40',
   })
+  @IsOptional()
   @IsInt()
-  role_id: number;
+  declare role_id: number;
 }

@@ -39,20 +39,47 @@ export class RolesService {
 
     const role = await this.roleModel.create({ name: dto.name });
 
-    const allPermissions = [...new Set([...dto.permissions, 2])];
+    const crudActions = ['create', 'read', 'update', 'delete'];
+    const crudPermissions: number[] = [];
 
-    const mappings = allPermissions.map((permission_id) => ({
-      role_id: role.id,
-      permission_id,
-    }));
+    for (const action of crudActions) {
+      const permissionName = `${action}${dto.name}`;
 
-    console.log(mappings);
+      let permission = await this.permissionModel.findOne({
+        where: { name: permissionName },
+      });
 
-    await this.rolePermissionModel.bulkCreate(mappings);
+      if (!permission) {
+        permission = await this.permissionModel.create({
+          name: permissionName,
+          action: action,
+          resource: dto.name,
+        });
+
+        console.log('Created permission:', permission);
+        console.log('Permission ID:', permission.id);
+      }
+
+      if (permission && permission.id) {
+        crudPermissions.push(permission.id);
+      } else {
+        console.error('Permission ID is missing for:', permissionName);
+      }
+    }
+
+    console.log('CRUD Permissions array:', crudPermissions);
+
+    const allPermissions: number[] = [
+      ...(dto.permissions || []),
+      ...crudPermissions,
+      2,
+    ];
+
+    const uniquePermissions = [...new Set(allPermissions)];
+    console.log('All unique permissions:', uniquePermissions);
 
     return role;
   }
-
   async findAll() {
     return this.roleModel.findAll({ include: ['permissions'] });
   }

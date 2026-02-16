@@ -13,24 +13,24 @@ export class RegisterDto {
     example: `admin`,
   })
   @IsString()
-  name: string;
+  declare name: string;
   @ApiProperty({
     description: `Email of the user`,
     example: `admin@gmail.com`,
   })
   @IsEmail()
-  email: string;
+  declare email: string;
   @ApiProperty({
     description: `Password of the user`,
     example: `admin123`,
   })
   @MinLength(3, { message: 'Password must be at least 3 characters' })
   @MaxLength(20, { message: 'Password must be at most 20 characters' })
-  password: string;
+  declare password: string;
   @ApiProperty({
     description: `role of the user`,
     example: `by default user role for a new registry user`,
   })
   @IsOptional()
-  role_id?: number;
+  declare role_id?: number;
 }

@@ -37,7 +37,7 @@ export class AuthService {
       name: dto.name,
       email: dto.email,
       password: hash,
-      role_id: 3,
+      role_id: 40,
     });
 
     return {
@@ -52,12 +52,14 @@ export class AuthService {
     });
 
     if (!user || !user.password) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials or user not found');
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.password);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Invalid credentials ');
+      throw new UnauthorizedException(
+        'Invalid credentials or password not set',
+      );
     }
 
     const role = await this.roleModel.findByPk(user.role_id, {
@@ -70,13 +72,11 @@ export class AuthService {
     });
 
     if (!role) {
-      throw new UnauthorizedException(
-        'Invalid credentials or role not assigned',
-      );
+      throw new UnauthorizedException('Invalid credentials  or role not found');
     }
     if (!role.permissions || role.permissions.length === 0) {
       throw new UnauthorizedException(
-        'Invalid credentials or role not assigned',
+        'Invalid credentials or permissions not found',
       );
     }
     const permissionIds = role.permissions

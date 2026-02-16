@@ -40,5 +40,5 @@ export class Role extends Model<RoleAttributes, RoleCreationAttributes> {
   declare name: string;
 
   @BelongsToMany(() => Permission, () => RolePermission)
-  declare permissions: Permission[];
+  declare permissions?: Permission[];
 }

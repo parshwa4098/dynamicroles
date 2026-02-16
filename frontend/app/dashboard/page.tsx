@@ -77,7 +77,7 @@ export default function Page() {
     name: "",
     email: "",
     password: "password",
-    role_id: 3,
+    role_id: 40,
   });
 
   const [profileEdit, setProfileEdit] = useState<ProfileEdit>({
@@ -293,7 +293,7 @@ export default function Page() {
         name: "",
         email: "",
         password: "password",
-        role_id: roles.length > 0 ? roles[0].id : 3,
+        role_id: roles.length > 0 ? roles[0].id : 40,
       });
     } catch (err: any) {
       toast.error(err.message || "Add failed");
@@ -551,23 +551,6 @@ export default function Page() {
                 setNewUser({ ...newUser, password: e.target.value })
               }
             />
-
-            <select
-              value={newUser.role_id}
-              className="w-full p-3 border border-gray-600 rounded-lg bg-black text-white"
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  role_id: Number(e.target.value),
-                })
-              }
-            >
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div className="flex gap-3 mt-6">

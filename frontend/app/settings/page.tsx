@@ -5,8 +5,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { FaUserShield, FaArrowLeft, FaKey } from "react-icons/fa";
-import { MdDelete, MdEdit, MdAdd } from "react-icons/md";
+import {
+  FaUserShield,
+  FaArrowLeft,
+  FaKey,
+  FaChevronDown,
+} from "react-icons/fa";
+import { MdDelete, MdEdit, MdAdd, MdClose } from "react-icons/md";
 
 const API_URL = "http://localhost:5000";
 
@@ -58,6 +63,8 @@ export default function SettingsPage() {
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
   const [editingRoleName, setEditingRoleName] = useState("");
   const [isRoleEditMode, setIsRoleEditMode] = useState(false);
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [newPermission, setNewPermission] = useState("");
   const [editingPermissionId, setEditingPermissionId] = useState<number | null>(
@@ -150,6 +157,19 @@ export default function SettingsPage() {
       });
   }, [router]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".permissions-dropdown")) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   if (loading) {
     return (
       <div className="w-full max-w-300 mx-auto p-6 bg-black min-h-screen">
@@ -176,14 +196,19 @@ export default function SettingsPage() {
     );
   };
 
+  const removePermission = (permissionId: number) => {
+    setSelectedPermissions((prev) => prev.filter((id) => id !== permissionId));
+  };
+
+  const getSelectedPermissionNames = () => {
+    return permissions
+      .filter((p) => selectedPermissions.includes(p.id))
+      .map((p) => p.name);
+  };
+
   const handleAddRole = async () => {
     if (!newRole.trim()) {
       toast.error("Role name required");
-      return;
-    }
-
-    if (selectedPermissions.length === 0) {
-      toast.error("At least one permission required");
       return;
     }
 
@@ -197,7 +222,6 @@ export default function SettingsPage() {
         },
         body: JSON.stringify({
           name: newRole,
-          permissions: selectedPermissions,
         }),
       });
 
@@ -516,31 +540,85 @@ export default function SettingsPage() {
 
             <div className="mb-4">
               <h3 className="text-white mb-3">Select Permissions:</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {permissions.map((permission) => (
-                  <label
-                    key={permission.id}
-                    className="flex items-center gap-3 text-white cursor-pointer bg-gray-800/50 p-3 rounded-lg hover:bg-gray-800 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPermissions.includes(permission.id)}
-                      onChange={() => handlePermissionToggle(permission.id)}
-                      className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
-                    />
-                    <span className="text-sm font-medium">
-                      {permission.name}
-                    </span>
-                  </label>
-                ))}
+
+              <div className="permissions-dropdown relative">
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="w-full bg-black border border-gray-700 p-3 rounded-lg text-white flex items-center justify-between hover:border-gray-600 transition-colors"
+                >
+                  <span className="text-gray-400">
+                    {selectedPermissions.length === 0
+                      ? "Select permissions..."
+                      : `${selectedPermissions.length} permission${selectedPermissions.length > 1 ? "s" : ""} selected`}
+                  </span>
+                  <FaChevronDown
+                    className={`text-gray-400 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {permissions.length === 0 ? (
+                      <div className="p-3 text-gray-400 text-center">
+                        No permissions available
+                      </div>
+                    ) : (
+                      permissions.map((permission) => (
+                        <label
+                          key={permission.id}
+                          className="flex items-center gap-3 p-3 hover:bg-gray-700 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPermissions.includes(
+                              permission.id,
+                            )}
+                            onChange={() =>
+                              handlePermissionToggle(permission.id)
+                            }
+                            className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
+                          />
+                          <span className="text-white text-sm">
+                            {permission.name}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
               {selectedPermissions.length > 0 && (
                 <div className="mt-3 p-3 bg-purple-500/10 rounded-lg">
-                  <p className="text-purple-300 text-sm">
-                    Selected: {selectedPermissions.length} permission
-                    {selectedPermissions.length > 1 ? "s" : ""}
+                  <p className="text-purple-300 text-sm mb-2">
+                    Selected permissions:
                   </p>
+                  <div className="flex flex-wrap gap-2">
+                    {getSelectedPermissionNames().map(
+                      (permissionName, index) => {
+                        const permissionId = permissions.find(
+                          (p) => p.name === permissionName,
+                        )?.id;
+                        return (
+                          <span
+                            key={index}
+                            className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 px-2 py-1 rounded-md text-xs"
+                          >
+                            {permissionName}
+                            <button
+                              onClick={() =>
+                                permissionId && removePermission(permissionId)
+                              }
+                              className="hover:text-purple-100 ml-1"
+                            >
+                              <MdClose className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      },
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -568,7 +646,7 @@ export default function SettingsPage() {
               ) : (
                 <button
                   onClick={handleAddRole}
-                  disabled={!newRole.trim() || selectedPermissions.length === 0}
+                  disabled={!newRole.trim()}
                   className="bg-purple-500/20 text-purple-400 px-6 py-3 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create Role

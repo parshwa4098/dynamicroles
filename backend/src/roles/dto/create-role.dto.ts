@@ -7,6 +7,7 @@ import {
   MinLength,
   MaxLength,
   IsNotEmpty,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateRoleDto {
@@ -22,9 +23,10 @@ export class CreateRoleDto {
     description: 'permissions ids were passed',
     example: [1, 2, 3],
   })
-  name: string;
+  declare name: string;
+  @IsOptional()
   @IsNotEmpty()
   @IsArray()
   @IsInt({ each: true })
-  permissions: number[];
+  declare permissions?: number[];
 }
