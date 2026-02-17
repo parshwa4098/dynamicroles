@@ -119,7 +119,11 @@ export class RolesService {
   async remove(id: number) {
     const role = await this.roleModel.findByPk(id);
     if (!role) throw new NotFoundException('Role not found');
-
+    if (role.id === 1 || role.id === 40) {
+      throw new ForbiddenException(
+        'Cannot delete Admin or users role there should be bu default one role exist along with admin role',
+      );
+    }
     const usersWithRole = await this.userModel.count({
       where: { role_id: id },
     });

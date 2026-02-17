@@ -15,49 +15,69 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
-import { PermissionGuard } from 'src/common/guards/permission.guard';
 import { JwtGuard } from 'src/common/guards/jwt.guard';
 import { ApiTags } from '@nestjs/swagger';
+
 @ApiTags('users')
 @Controller('users')
+@UseGuards(JwtGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-  @UseGuards(JwtGuard, PermissionGuard)
-  @Post()
-  @RequirePermissions(1)
-  create(@Body() dto: CreateUserDto) {
-    console.log(dto);
 
-    return this.usersService.create(dto);
+  @Post()
+  async create(@Body() dto: CreateUserDto, @Req() req) {
+    const user = await this.usersService.create(dto, req.user);
+    return {
+      success: true,
+      data: user,
+      message: 'User created successfully',
+    };
   }
 
   @Get()
-  @RequirePermissions(2)
-  findAll() {
-    return this.usersService.findAll();
+  async findAll(@Req() req) {
+    const users = await this.usersService.findAll(req.user);
+    return {
+      success: true,
+      data: users,
+    };
+  }
+
+  @Get('permissions/:id')
+  async findUsersPermissions(@Param('id', ParseIntPipe) id: number) {
+    return await this.usersService.getUserPermissions(id);
   }
 
   @Get(':id')
-  @RequirePermissions(2)
-  findOne(@Param('id') id: number) {
-    return this.usersService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Req() req) {
+    const user = await this.usersService.findOne(id, req.user);
+    return {
+      success: true,
+      data: user,
+    };
   }
-  @UseGuards(JwtGuard, PermissionGuard)
+
   @Patch(':id')
-  @RequirePermissions(3)
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateUserDto,
     @Req() req,
   ) {
-    return this.usersService.update(id, dto, req.user);
+    const result = await this.usersService.update(id, dto, req.user);
+    return {
+      success: true,
+      data: result,
+      message: 'User updated successfully',
+    };
   }
 
-  @UseGuards(JwtGuard, PermissionGuard)
   @Delete(':id')
-  @RequirePermissions(4)
-  remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
-    return this.usersService.remove(id, req.user);
+  async remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
+    const result = await this.usersService.remove(id, req.user);
+    return {
+      success: true,
+      data: result,
+      message: 'User deleted successfully',
+    };
   }
 }

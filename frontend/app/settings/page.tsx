@@ -141,7 +141,14 @@ export default function SettingsPage() {
       }),
     ])
       .then(([usersRes, rolesRes, permissionsRes]) => {
-        setAllUsers(usersRes.data || []);
+        const usersData = Array.isArray(usersRes?.data?.data)
+          ? usersRes.data.data
+          : Array.isArray(usersRes?.data)
+            ? usersRes.data
+            : [];
+
+        setAllUsers(usersData);
+
         setRoles(rolesRes.data || []);
 
         const permissionsData =
@@ -157,7 +164,6 @@ export default function SettingsPage() {
       });
   }, [router]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -205,6 +211,23 @@ export default function SettingsPage() {
       .filter((p) => selectedPermissions.includes(p.id))
       .map((p) => p.name);
   };
+  const refetchPermissions = async () => {
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/permissions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error("Failed to fetch permissions");
+
+      const permissionsRes = await res.json();
+      const permissionsData =
+        permissionsRes.data?.data || permissionsRes.data || [];
+      setPermissions(permissionsData);
+    } catch (error) {
+      console.error("Failed to refetch permissions:", error);
+    }
+  };
 
   const handleAddRole = async () => {
     if (!newRole.trim()) {
@@ -229,6 +252,9 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.message || "Failed to create role");
 
       setRoles((prev) => [...prev, data.data]);
+
+      await refetchPermissions();
+
       setNewRole("");
       setSelectedPermissions([]);
       toast.success("Role created successfully");
@@ -317,6 +343,15 @@ export default function SettingsPage() {
       return;
     }
 
+    const tempPermission = {
+      id: Date.now(),
+      name: newPermission.trim(),
+    };
+
+    setPermissions((prev) => [...prev, tempPermission]);
+    const permissionName = newPermission.trim();
+    setNewPermission("");
+
     try {
       const token = getToken();
       const res = await fetch(`${API_URL}/permissions`, {
@@ -326,7 +361,7 @@ export default function SettingsPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: newPermission.trim(),
+          name: permissionName,
         }),
       });
 
@@ -335,10 +370,14 @@ export default function SettingsPage() {
         throw new Error(data.message || "Failed to create permission");
 
       const newPermissionData = data.data?.data || data.data || data;
-      setPermissions((prev) => [...prev, newPermissionData]);
-      setNewPermission("");
+
+      setPermissions((prev) =>
+        prev.map((p) => (p.id === tempPermission.id ? newPermissionData : p)),
+      );
+
       toast.success("Permission created successfully");
     } catch (err: any) {
+      setPermissions((prev) => prev.filter((p) => p.id !== tempPermission.id));
       toast.error(err.message || "Create failed");
     }
   };
